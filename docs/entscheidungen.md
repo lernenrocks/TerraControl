@@ -108,6 +108,10 @@ Shelly Gen2/3 über SHA-256 Digest Auth zuverlässig schalten. Grundlage für di
 - Zusätzlich: ESP32-interne Temperatur + RTC-Temperatur (DS3231 über I²C)
 - Protokoll-Mix: DHT22 (Single-Bus) + I²C (RTC) — beide parallel betreibbar
 
+**Stromversorgung: MB102 + Elkos**
+- 10µF Elko an 5V-Schiene ist funktionsfähig aber knapp
+- Bei WiFi-Stabilitätsproblemen auf 100µF erhöhen
+
 **Display: LVGL — ans Ende verschoben, Flash-Budget erst ermitteln**
 - Erst Kernfunktion (WiFi, Sensoren, Regeln, NVS) fertigstellen und Flash-Verbrauch messen
 - LVGL bevorzugt — bei 4MB Flash (Standard): OTA-Partitionen je ~1.9MB, kann eng werden
