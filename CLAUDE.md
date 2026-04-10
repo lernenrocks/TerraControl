@@ -59,12 +59,12 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
 | Komponente | Interface | Pins |
 |---|---|---|
-| TFT Display (ILI9341) | SPI | MOSI=23, SCLK=18, MISO=19, CS=5, DC=16, RST=17 |
+| TFT Display 3,2" (ILI9341) | SPI | MOSI=23, SCLK=18, MISO=19, CS=5, DC=16, RST=17 |
 | Touch (XPT2046) | SPI | CS=4 |
 | SD-Karte | SPI | CS=32 |
 | DS3231 RTC | I²C | SDA=21, SCL=22 |
 | DHT22 #0–#3 | Single-Bus | GPIO 25, 26, 27, 33 |
-| Backlight PWM | — | GPIO 15 → Transistor |
+| Backlight PWM | — | GPIO 15 → S8050 (NPN, TO-92) |
 
 Display-Bibliothek: `TFT_eSPI` (aktuell) — Wechsel zu LVGL nach Flash-Budget-Messung.
 

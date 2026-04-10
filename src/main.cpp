@@ -40,6 +40,8 @@ void setup()
   DataHub::WifiRelay wifiRelayEntry = {};
   strncpy(wifiRelayEntry.mac, TERRA_CONTOL_000_MAC_STR, sizeof(wifiRelayEntry.mac) - 1);
   wifiRelayEntry.inUse = true;
+  /** @note for mac Integration Test */
+  //wifiRelayEntry.inUse = false;
   DataHub::setWifiRelayEntry(wifiRelayEntry, 0);
   strncpy(wifiRelayEntry.mac, TERRA_CONTOL_001_MAC_STR, sizeof(wifiRelayEntry.mac) - 1);
   wifiRelayEntry.inUse = true;
@@ -74,11 +76,17 @@ void switchRelays()
 
 void loop()
 {
-  static unsigned long lastRun = -40000UL;//Offset, damit der erste Durchlauf gleich nach dem Start passiert.
+  static unsigned long lastRun = -40000UL; // Offset, damit der erste Durchlauf gleich nach dem Start passiert.
   if (millis() - lastRun >= 40000UL)
   {
     lastRun = millis();
     switchRelays();
+  }
+  static unsigned long lastHeapLog = 0;
+  if (millis() - lastHeapLog >= 30000UL)
+  {
+    lastHeapLog = millis();
+    Serial.printf("[HEAP] Frei: %u Bytes\n", ESP.getFreeHeap());
   }
   WiFiManager::checkRelayTimeouts();
 }
