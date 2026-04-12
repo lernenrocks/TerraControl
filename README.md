@@ -11,19 +11,19 @@ that was definitely not the plan.*
 
 
 
-## Current Status
-
-This is an early prototype. Further sensors and actuators 
-are planned and will be evaluated in future versions.
+## Roadmap
 
 - [x] WiFi connection and Shelly Plug Gen2/3 discovery via mDNS
 - [x] Shelly status retrieval and switching via SHA-256 Digest Auth, identified by MAC address — robust against IP reassignment
-- [ ] Sensor integration (DHT22 and other)
-- [ ] Time-based switching rules with sensor thresholds
-- [ ] Battery-backed RTC (DS3231) for timekeeping - including timezone support, automatic daylight saving time adjustment and NTP synchronization
-- [ ] SD-Card for setup and logging
-- [ ] Touch display interface
-- [ ] Optional Database connection
+- [ ] DHT22 sensor integration (local, 4 sensors)
+- [ ] WiFiWorker — async WiFi task with request queue, replaces blocking polling loop
+- [ ] Remote sensors — generic sensor values fetched from secondary ESP32 devices (e.g. load cell, soil moisture) via WiFiWorker queue
+- [ ] RTC (DS3231) — timekeeping with timezone support, DST adjustment, NTP synchronization
+- [ ] Switching logic — connect a single sensor value to a Shelly relay, with threshold and time-based rules
+- [ ] JSON config layer — serialization/deserialization for all settings; initially hardcoded, later file-backed
+- [ ] SD card — load and store configuration as JSON; primary config input mechanism
+- [ ] Display *(optional — subject to flash budget; fallback: SPI card reader or USB-CDC)*
+- [ ] NVS — persist last valid configuration across reboots; scope depends on whether display is implemented
 
 
 ## Hardware
@@ -91,6 +91,12 @@ automatically by PlatformIO:
 
 > **Note:** Library versions may change as development progresses, 
 > particularly if LVGL is adopted for the display interface.
+
+## AI Assistance
+
+This project is developed with support from [Claude Code](https://claude.ai/code) (Anthropic). Claude assists with firmware architecture decisions, code reviews, writing and refining unit tests, and keeping the codebase consistent with the project's strict constraints, e. g. no heap allocation, no `HTTPClient`, direct `WiFiClient` usage throughout.
+
+The architectural rules and conventions are maintained in `CLAUDE.md`, which serves as the authoritative reference for the collaboration. Claude works within those boundaries rather than around them.
 
 ## Feedback
 Questions and feedback are always welcome — feel free to open an issue. 
