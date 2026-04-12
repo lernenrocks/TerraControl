@@ -4,13 +4,14 @@
 #define MAC_LEN 13
 #define NAME_LEN 32
 #define RELAY_SIZE 8
-#define DEVICE_NAME_MAX 16
+#define UNIT_LEN 8
+#define SENSOR_DATA_SIZE 16
 
 namespace DataHub
 {
     struct SystemData
     {
-        char deviceName[DEVICE_NAME_MAX] = "TerraControl";
+        char deviceName[NAME_LEN] = "TerraControl";
     };
 
     struct WiFiStatus
@@ -28,18 +29,32 @@ namespace DataHub
     {
         char ipV4Adress[IP_LEN] = {};
         char mac[MAC_LEN] = {};
-        int rssi =0; /**<@brief Wlan Dämpfung */
+        int rssi = 0; /**<@brief Wlan Dämpfung */
         char name[NAME_LEN] = {};
-        bool inUse = false;  /**<@brief Relay soll gefunden werden (nichtfinden ist Fehlerzustand) */
-        bool online = false; /**<@brief Relay ist ansteuerbar (wird false, wenn nicht mehr da) */
-        int id = 0;          /**<@brief ID der Switch im Relay, bei einfacher Dose 0, bei $ fach 0-3 */
-        bool output = false;    /**<@brief ist Switch angeschaltet? */
-        float voltage = 0.0f; /**<@brief Spannung in Volt */
-        float current = 0.0f; /**<@brief Stromstärke in Ampere */
-        float power = 0.0f;   /**<@brief Leistung in Watt */
-        float aenergy = 0.0f; /**<@brief Verbrauch in kWh */
-        unsigned long lastUpdate = 0;/**<@brief Zeitstempel, wenn das letzte mal die Dose angesprochen wurde */
-        bool isDirty=true; /**<@brief GUI relevante Änderungen wurden gemacht */
+        bool inUse = false;           /**<@brief Relay soll gefunden werden (nichtfinden ist Fehlerzustand) */
+        bool online = false;          /**<@brief Relay ist ansteuerbar (wird false, wenn nicht mehr da) */
+        int id = 0;                   /**<@brief ID der Switch im Relay, bei einfacher Dose 0, bei $ fach 0-3 */
+        bool output = false;          /**<@brief ist Switch angeschaltet? */
+        float voltage = 0.0f;         /**<@brief Spannung in Volt */
+        float current = 0.0f;         /**<@brief Stromstärke in Ampere */
+        float power = 0.0f;           /**<@brief Leistung in Watt */
+        float aenergy = 0.0f;         /**<@brief Verbrauch in kWh */
+        unsigned long lastUpdate = 0; /**<@brief Zeitstempel, wenn das letzte mal die Dose angesprochen wurde */
+        bool isDirty = true;          /**<@brief GUI relevante Änderungen wurden gemacht */
+    };
+    /**
+     * @brief symbolises read sensor data.
+     */
+    struct SensorData
+    {
+        uint8_t id;          /**<@brief identifier */
+        char name[NAME_LEN]; /**<@brief name or label  */
+        float value = 0.0f;  /**<@brief meassured value */
+        char unit[UNIT_LEN] = {};/**<@brief unit of the meassured value, e.g. °C or g */
+        bool inUse = false; /**<@brief Sensor should be seen or have valid output */
+        bool online = false;/**<@brief Sensor is valid  */
+        unsigned long lastUpdate = 0; /**<@brief timestamp of the last successfull update of this struckt */
+        bool dirty = true; /**@brief flag for GUI */
     };
 
     struct DataHub
@@ -47,6 +62,7 @@ namespace DataHub
         SystemData systemData;
         WiFiStatus wifiStatus;
         WifiRelay wifiRelay[RELAY_SIZE];
+        SensorData sensorData[SENSOR_DATA_SIZE];
     };
     /**
      * @brief Initialisiert den DataHub und seinen Mutex. Setzt Standardwerte.
