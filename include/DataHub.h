@@ -47,13 +47,13 @@ namespace DataHub
      */
     struct SensorData
     {
-        uint8_t id;          /**<@brief identifier */
+        int id;          /**<@brief identifier */
         char name[NAME_LEN]; /**<@brief name or label  */
-        float value = 0.0f;  /**<@brief meassured value */
-        char unit[UNIT_LEN] = {};/**<@brief unit of the meassured value, e.g. °C or g */
-        bool inUse = false; /**<@brief Sensor should be seen or have valid output */
+        float value = 0.0f;  /**<@brief measured value */
+        char unit[UNIT_LEN] = {};/**<@brief unit of the measured value, e.g. °C or g */
+        bool inUse = false; /**<@brief Sensor should be seen */
         bool online = false;/**<@brief Sensor is valid  */
-        unsigned long lastUpdate = 0; /**<@brief timestamp of the last successfull update of this struckt */
+        unsigned long lastUpdate = 0; /**<@brief timestamp of the last successful update of this struct */
         bool dirty = true; /**@brief flag for GUI */
     };
 
