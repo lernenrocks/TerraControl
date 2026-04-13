@@ -33,6 +33,7 @@ Depending on the components used, wiring may differ -
 particularly for the display module, as variations in pinout 
 and layout are common across manufacturers.
 
+The wiring diagram and the hardware list may contain errors. 
 
 ![TerraControl MainUnit v1](hardware/TerraControl_MainUnit_V1_bb.png)
 
@@ -49,11 +50,10 @@ and layout are common across manufacturers.
 | DHT22 | Temperature and humidity sensor | 4 |
 | MB102 | Breadboard power supply 3.3V / 5V | 1 |
 | S8050 | NPN transistor, TO-92 | 1 |
-| Resistor | 1kΩ, metal film | 1 |
-| Capacitor | 100nF ceramic (104) | 2 |
-| Capacitor | 100µF electrolytic | 1 |
-| Capacitor | 10µF electrolytic | 2 |
-| Breadboard | 830 holes | 2 |
+| Resistor | 1kΩ | 1 |
+| Capacitor | 100nF ceramic (104) | 1 |
+| Capacitor | 100µF electrolytic | 2 |
+| Breadboard | 830 holes | 2 - 3 |
 | Dupont cables | Male-to-Male / Male-to-Female / Female-to-Female | assorted |
 | USB cable | Micro-USB, for ESP32 power and flashing | 1 |
 | Power supply | 9-12V DC barrel jack, min. 1A | 1 |
