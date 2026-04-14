@@ -43,18 +43,17 @@ namespace DataHub
         bool isDirty = true;          /**<@brief GUI relevante Änderungen wurden gemacht */
     };
     /**
-     * @brief symbolises read sensor data.
+     * @brief represents a sensor data entry
      */
     struct SensorData
     {
-        int id;          /**<@brief identifier */
-        char name[NAME_LEN]; /**<@brief name or label  */
-        float value = 0.0f;  /**<@brief measured value */
-        char unit[UNIT_LEN] = {};/**<@brief unit of the measured value, e.g. °C or g */
-        bool inUse = false; /**<@brief Sensor should be seen */
-        bool online = false;/**<@brief Sensor is valid  */
+        char name[NAME_LEN]; /** <@brief name or label  */
+        float value = 0.0f;  /** <@brief measured value */
+        char unit[UNIT_LEN] = {};/** <@brief unit of the measured value, e.g. °C or g */
+        bool inUse = false; /** <@brief Sensor is represented and expected to be present */
+        bool online = false;/** <@brief last reading was succsessful; sensor is reachable and responding  */
         unsigned long lastUpdate = 0; /**<@brief timestamp of the last successful update of this struct */
-        bool dirty = true; /**@brief flag for GUI */
+        bool dirty = true; /** <@brief flag for GUI */
     };
 
     struct DataHub
@@ -128,14 +127,58 @@ namespace DataHub
      *        Wird aufgerufen, wenn ein HTTP-Request an diese IP fehlschlägt.
      * @param ip IPv4-Adresse als null-terminierter String.
      */
-    void setOfflineByIP(const char *ip);
+    void setWifiRelayOfflineByIP(const char *ip);
 
+    /**
+     * @brief registers a SensorData in an unused slot
+     * @param in the SensorData entry to register
+     * @return the index of the registration. -2 if the array was allready full and -1 if there was a mutex error 
+     */
+    int registerSensor(SensorData &in);
+
+    /**
+     * @brief deletes a SensorData entry by its id (index)
+     * @param id the index of the SensorData entry
+     * @return returns true on success
+     */
+    bool deleteSensor(int id);
+    /**
+     * @brief setter for SensorData entry. Copies the entry into the DataHub
+     * @param in the Sensor entry
+     * @param id the identifier of the entry (not array index)
+     * @return returns true on success
+     */
+    bool setSensorData(SensorData &in, int id);
+
+    /**
+     * @brief getter for a SensorData entry, copies the entry into the given reference
+     * @param out target entry
+     * @param id identifier of the entry (not array index)
+     * @return returns true on success
+     */
+    bool getSensorData(SensorData &out, int id);
+
+    /**
+     * @brief getter for the SensorData Array, copies the array into the given reference
+     * @param out target array
+     * @return returns true on success
+     */
+    bool getSensorDataArray(SensorData (&out)[SENSOR_DATA_SIZE]);
+
+
+
+    //toString funktions
     /**
      * @brief Loggt einen einzelnen WifiRelay-Eintrag auf Serial.
      * @param relay Referenz zum Eintrag.
      */
     void wifiRelayToSerial(const WifiRelay &relay);
 
+
+    /**
+     * @brief prints the sensorData Array to Serial for debugging
+     */
+    void sensorDataToSerial();
     /**
      * @brief Schreibt den kompletten DataHub-Zustand auf Serial (Debug / Logging).
      */

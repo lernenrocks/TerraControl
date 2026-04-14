@@ -63,7 +63,7 @@ namespace
         wifiClient.stop();
         if (!success)
         {
-            DataHub::setOfflineByIP(ip);
+            DataHub::setWifiRelayOfflineByIP(ip);
         }
         return success;
     }

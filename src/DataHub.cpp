@@ -4,6 +4,7 @@
 
 DataHub::DataHub dataHub;
 static SemaphoreHandle_t dataHubMutex = nullptr;
+
 namespace DataHub
 {
     bool initDataHub()
@@ -126,7 +127,7 @@ namespace DataHub
      *        ohne mDNS-Lookup wiederverwendet werden kann.
      * @param ip IPv4-Adresse als null-terminierter String.
      */
-    void setOfflineByIP(const char *ip)
+    void setWifiRelayOfflineByIP(const char *ip)
     {
         if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
         {
@@ -140,6 +141,84 @@ namespace DataHub
             }
         }
         xSemaphoreGive(dataHubMutex);
+    }
+
+    int registerSensor(SensorData &in)
+    {
+        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            return -1;
+        }
+        for (int i = 0; i < SENSOR_DATA_SIZE; i++)
+        {
+            if (!dataHub.sensorData[i].inUse)
+            {
+                dataHub.sensorData[i] = in;
+                xSemaphoreGive(dataHubMutex);
+                return i;
+            }
+        }
+        Serial.println("Kein freier Platz in Sensor Array");
+        xSemaphoreGive(dataHubMutex);
+        return -2;
+    }
+
+    bool deleteSensor(int id)
+    {
+        if (id >= SENSOR_DATA_SIZE)
+        {
+            return false;
+        }
+        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            return false;
+        }
+        dataHub.sensorData[id] = {};
+        xSemaphoreGive(dataHubMutex);
+        return true;
+    }
+
+    bool setSensorData(SensorData &in, int id)
+    {
+        if (id >= SENSOR_DATA_SIZE)
+        {
+            return false;
+        }
+        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            return false;
+        }
+        dataHub.sensorData[id] = in;
+        xSemaphoreGive(dataHubMutex);
+        return true;
+    }
+    bool getSensorData(SensorData &out, int id)
+    {
+        if (id >= SENSOR_DATA_SIZE)
+        {
+            return false;
+        }
+        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            return false;
+        }
+        out = dataHub.sensorData[id];
+        xSemaphoreGive(dataHubMutex);
+        return true;
+    }
+
+    bool getSensorDataArray(SensorData (&out)[SENSOR_DATA_SIZE])
+    {
+        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            return false;
+        }
+        for (size_t i = 0; i < SENSOR_DATA_SIZE; i++)
+        {
+            out[i] = dataHub.sensorData[i];
+        }
+        xSemaphoreGive(dataHubMutex);
+        return true;
     }
 
     void dataHubToSerial()
@@ -235,7 +314,32 @@ namespace DataHub
                       relay.power,
                       relay.aenergy,
                       relay.lastUpdate);
+    }
+    void sensorDataToSerial()
+    {
+        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            Serial.println("sensorDataToSerial: mutex take failed");
+            return;
+        }
+        unsigned long now = millis();
+        Serial.println("--- SensorData ---");
+        for (int i = 0; i < SENSOR_DATA_SIZE; i++)
+        {
+            auto &s = dataHub.sensorData[i];
+            // if (!s.inUse)
+            //     continue;
+            unsigned long age = (s.lastUpdate > 0) ? (now - s.lastUpdate) / 1000 : 0;
+            const char *statusColor = s.online ? "\033[32m" : "\033[31m";
+            Serial.printf("[%d] %-16s  %s%-7s\033[0m  %8.2f %-4s  ",
+                          i, s.name, statusColor, s.online ? "ONLINE" : "OFFLINE",
+                          s.value, s.unit);
+            if (s.lastUpdate == 0)
+                Serial.println("\033[33m(nie gesehen)\033[0m");
+            else
+                Serial.printf("(vor %lus)\n", age);
+        }
+        Serial.println("--- end SensorData ---");
         xSemaphoreGive(dataHubMutex);
     }
-
 }
