@@ -8,6 +8,13 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
 ---
 
+## Zusammenarbeit
+
+- Moderne C++-Ansätze bevorzugen und erklären (z.B. anonymer Namespace statt `static` auf Dateiebene, `nullptr` statt `NULL`)
+- Der User lernt aktiv — neue Konzepte kurz erklären wenn sie eingesetzt werden
+
+---
+
 ## Nicht verhandelbare Regeln
 
 ### Kein Heap — niemals
