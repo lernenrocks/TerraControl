@@ -143,6 +143,7 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 
 ### Sensor-Architektur
 - `SensorEntry` ist generisch — ein Eintrag, ein Messwert (`float`), egal ob DHT22, Wägezelle oder Lichtsensor
+- `lastUpdate = 0` als Default ist bewusst — der erste Read erfolgt erst nach dem ersten abgelaufenen Intervall; gibt lokalen Sensoren Aufwärmzeit und Remote-Sensoren Zeit für WiFi-Verbindungsaufbau nach Stromausfall
 - Registrierung analog zu Shellys: API-Funktion, zunächst in `setup()` aufgerufen, später von SD/GUI
 - Lokale Sensoren schreiben direkt in DataHub; Remote-Sensoren legen Request in WiFiWorker-Queue
 - `valid` und `lastUpdate` in `SensorEntry` sind load-bearing — Schaltlogik muss Staleness prüfen

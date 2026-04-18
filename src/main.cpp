@@ -10,6 +10,7 @@
 #include "wifi_config.h"
 #include "WiFiManager.h"
 #include "DataHub.h"
+#include "SensorManager.h"
 
 #define APP_VERSION "0.1"
 
@@ -35,13 +36,14 @@ void setup()
   Serial.println("\n--- Setup abgeschlossen ---");
   Serial.println("Bereit für WiFiManager Neuaufbau\n");
   DataHub::initDataHub();
+  /*
   WiFiManager::initWiFi();
   WiFiManager::updateWifiStatus();
   DataHub::WifiRelay wifiRelayEntry = {};
   strncpy(wifiRelayEntry.mac, TERRA_CONTOL_000_MAC_STR, sizeof(wifiRelayEntry.mac) - 1);
   wifiRelayEntry.inUse = true;
-  /** @note for mac Integration Test */
-  //wifiRelayEntry.inUse = false;
+  // @note for mac Integration Test 
+  // wifiRelayEntry.inUse = false;
   DataHub::setWifiRelayEntry(wifiRelayEntry, 0);
   strncpy(wifiRelayEntry.mac, TERRA_CONTOL_001_MAC_STR, sizeof(wifiRelayEntry.mac) - 1);
   wifiRelayEntry.inUse = true;
@@ -50,7 +52,9 @@ void setup()
   wifiRelayEntry.inUse = true;
   DataHub::setWifiRelayEntry(wifiRelayEntry, 2);
   WiFiManager::findStoredRelays();
-  DataHub::dataHubToSerial();
+  */
+  //DataHub::dataHubToSerial();
+  //? Sensoren anmelden und Testen
   Serial.println("Setup beendet.");
 }
 

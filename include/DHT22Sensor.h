@@ -20,7 +20,7 @@ namespace DHT22Sensor{
      * @param idx position of of the sensor index (0 - 3)
      * @param valueType requested value TEMPERATURE od HUMIDITY 
      * @param value value output parameter
-     * @return true, if both values valid, false on read error
+     * @return true, if value valid, false on read error
      */
     bool readValue(int idx, DHT22Value valueType, float &value);
 }
