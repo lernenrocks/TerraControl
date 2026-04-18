@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SensorTypes.h"
+
 #define IP_LEN 16
 #define MAC_LEN 13
 #define NAME_LEN 32
@@ -47,13 +49,17 @@ namespace DataHub
      */
     struct SensorData
     {
-        char name[NAME_LEN]; /** <@brief name or label  */
-        float value = 0.0f;  /** <@brief measured value */
-        char unit[UNIT_LEN] = {};/** <@brief unit of the measured value, e.g. °C or g */
-        bool inUse = false; /** <@brief Sensor is represented and expected to be present */
-        bool online = false;/** <@brief last reading was succsessful; sensor is reachable and responding  */
-        unsigned long lastUpdate = 0; /**<@brief timestamp of the last successful update of this struct */
-        bool dirty = true; /** <@brief flag for GUI */
+        SensorType type = SensorType::UNKNOWN; /** <@brief sensor type — determines which API the SensorManager calls */
+        char name[NAME_LEN] = {};                        /** <@brief name or label */
+        float value = 0.0f;                              /** <@brief measured value */
+        char unit[UNIT_LEN] = {};                        /** <@brief unit of the measured value, e.g. °C or % */
+        bool inUse = false;                              /** <@brief sensor is registered and expected to be present */
+        bool online = false;                             /** <@brief last reading was successful; sensor is reachable and responding */
+        unsigned long lastUpdate = 0;                    /** <@brief timestamp of the last successful update */
+        bool dirty = true;                               /** <@brief flag for GUI */
+        unsigned long updateInterval = 10000;            /** <@brief update interval in ms */
+        char sourceMac[MAC_LEN] = {};                    /** <@brief empty for local sensors; MAC of remote ESP32-C3 node */
+        int sensorIndex = 0;                             /** <@brief DHT22: physical sensor 0–3 | Remote: sensor ID on the node */
     };
 
     struct DataHub
@@ -132,7 +138,7 @@ namespace DataHub
     /**
      * @brief registers a SensorData in an unused slot
      * @param in the SensorData entry to register
-     * @return the index of the registration. -2 if the array was allready full and -1 if there was a mutex error 
+     * @return the index of the registration. -2 if the array is full and -1 if there was a mutex error 
      */
     int registerSensor(SensorData &in);
 
@@ -143,9 +149,9 @@ namespace DataHub
      */
     bool deleteSensor(int id);
     /**
-     * @brief setter for SensorData entry. Copies the entry into the DataHub
+     * @brief setter for SensorData entry. Copies the entry into the DataHub, overwrites the old Data
      * @param in the Sensor entry
-     * @param id the identifier of the entry (not array index)
+     * @param id the index of the entry 
      * @return returns true on success
      */
     bool setSensorData(SensorData &in, int id);

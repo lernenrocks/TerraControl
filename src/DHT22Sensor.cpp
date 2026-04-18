@@ -3,9 +3,8 @@
 
 namespace
 {
-#define DHTSENSORS_LEN 4
-
-#define DHTTYPE 22
+constexpr int DHTSENSORS_LEN = 4;
+constexpr int DHTTYPE = 22;
 
     DHT dhtSensors[DHTSENSORS_LEN] = {
         DHT(DHTPIN_0, DHTTYPE),
@@ -24,14 +23,22 @@ namespace DHT22Sensor
             dhtSensors[i].begin();
         }
     }
-    bool readValues(int idx, float &temperature, float &humidity)
-    {
-        if (idx >= DHTSENSORS_LEN)
+
+    bool readValue(int idx, DHT22Value valueType, float &value){
+               if (idx <0 || idx >= DHTSENSORS_LEN)
         {
             return false;
         }
-        temperature = dhtSensors[idx].readTemperature();
-        humidity = dhtSensors[idx].readHumidity();
-        return !isnan(temperature) && !isnan(humidity);
+        if(valueType==DHT22Value::TEMPERATURE){
+            value=dhtSensors[idx].readTemperature();
+        }
+        else if(valueType==DHT22Value::HUMIDITY){
+            value = dhtSensors[idx].readHumidity();
+        }
+        else {
+            return false;
+        }
+        return !isnan(value);
     }
 }
+
