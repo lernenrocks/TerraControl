@@ -48,6 +48,7 @@ namespace SensorManager
             }
             else
             {
+                sensors[i].lastUpdate=now;
                 if (!sensors[i].online)
                 {
                     sensors[i].online = true;
@@ -59,10 +60,17 @@ namespace SensorManager
                 sensors[i].value = value;
                 sensors[i].dirty = true;
             }
-            if (sensors[i].dirty)
-            {
-                DataHub::setSensorData(sensors[i], i);
-            }
+           DataHub::setSensorData(sensors[i], i);
+        }
+    }
+
+    void calibrate(int idx, float calMin,float calMax, float calOffset){
+        DataHub::SensorData sensor;
+        if(DataHub::getSensorData(sensor,idx)){
+            sensor.calMin=calMin;
+            sensor.calMax=calMax;
+            sensor.calOffset=calOffset;
+            DataHub::setSensorData(sensor,idx);
         }
     }
 }

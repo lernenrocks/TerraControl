@@ -192,9 +192,9 @@ namespace DataHub
         xSemaphoreGive(dataHubMutex);
         return true;
     }
-    bool getSensorData(SensorData &out, int id)
+    bool getSensorData(SensorData &out, int idx)
     {
-        if (id >= SENSOR_DATA_SIZE)
+        if (idx >= SENSOR_DATA_SIZE)
         {
             return false;
         }
@@ -202,7 +202,7 @@ namespace DataHub
         {
             return false;
         }
-        out = dataHub.sensorData[id];
+        out = dataHub.sensorData[idx];
         xSemaphoreGive(dataHubMutex);
         return true;
     }
@@ -331,9 +331,18 @@ namespace DataHub
             //     continue;
             unsigned long age = (s.lastUpdate > 0) ? (now - s.lastUpdate) / 1000 : 0;
             const char *statusColor = s.online ? "\033[32m" : "\033[31m";
-            Serial.printf("[%d] %-16s  %s%-7s\033[0m  %8.2f %-4s  ",
+            const char *typeName = "UNKNOWN";
+            switch (s.type)
+            {
+            case SensorType::DHT22_TEMPERATURE: typeName = "DHT22_TEMP"; break;
+            case SensorType::DHT22_HUMIDITY:    typeName = "DHT22_HUM";  break;
+            case SensorType::SOIL_MOISTURE:     typeName = "SOIL";       break;
+            case SensorType::REMOTE_SENSOR:     typeName = "REMOTE";     break;
+            default: break;
+            }
+            Serial.printf("[%d] %-16s  %s%-7s\033[0m  %8.2f %-4s  type=%-10s idx=%d  ",
                           i, s.name, statusColor, s.online ? "ONLINE" : "OFFLINE",
-                          s.value, s.unit);
+                          s.value, s.unit, typeName, s.sensorIndex);
             if (s.lastUpdate == 0)
                 Serial.println("\033[33m(nie gesehen)\033[0m");
             else

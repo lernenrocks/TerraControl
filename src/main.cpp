@@ -11,6 +11,7 @@
 #include "WiFiManager.h"
 #include "DataHub.h"
 #include "SensorManager.h"
+#include "SensorTypes.h" // @note remove if loading from JSON is implemented
 
 #define APP_VERSION "0.1"
 
@@ -55,6 +56,55 @@ void setup()
   */
   //DataHub::dataHubToSerial();
   //? Sensoren anmelden und Testen
+
+  SensorManager::initSensors();
+  Serial.println("Sensoren initialisiert");
+  //DHT00
+  DataHub::SensorData sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
+  sensor.sensorIndex=0;
+  strncpy(sensor.name,"DHT000_Temp",NAME_LEN);
+  strncpy(sensor.unit,"°C",UNIT_LEN);
+  sensor.type=SensorType::DHT22_TEMPERATURE;
+  DataHub::registerSensor(sensor);
+  strncpy(sensor.name,"DHT000_Hum",NAME_LEN);
+  strncpy(sensor.unit,"%",UNIT_LEN);
+  sensor.type=SensorType::DHT22_HUMIDITY;
+  DataHub::registerSensor(sensor);
+  
+  //DHT01
+  sensor.sensorIndex=1;
+  strncpy(sensor.name,"DHT001_Temp",NAME_LEN);
+  strncpy(sensor.unit,"°C",UNIT_LEN);
+  sensor.type=SensorType::DHT22_TEMPERATURE;
+  DataHub::registerSensor(sensor);
+  strncpy(sensor.name,"DHT001_Hum",NAME_LEN);
+  strncpy(sensor.unit,"%",UNIT_LEN);
+  sensor.type=SensorType::DHT22_HUMIDITY;
+  DataHub::registerSensor(sensor);
+  
+  //DHT02
+  sensor.sensorIndex=2;
+  strncpy(sensor.name,"DHT002_Temp",NAME_LEN);
+  strncpy(sensor.unit,"°C",UNIT_LEN);
+  sensor.type=SensorType::DHT22_TEMPERATURE;
+  DataHub::registerSensor(sensor);
+  strncpy(sensor.name,"DHT002_Hum",NAME_LEN);
+  strncpy(sensor.unit,"%",UNIT_LEN);
+  sensor.type=SensorType::DHT22_HUMIDITY;
+  DataHub::registerSensor(sensor);
+  
+  //DHT03
+  sensor.sensorIndex=3;
+  strncpy(sensor.name,"DHT003_Temp",NAME_LEN);
+  strncpy(sensor.unit,"°C",UNIT_LEN);
+  sensor.type=SensorType::DHT22_TEMPERATURE;
+  DataHub::registerSensor(sensor);
+  strncpy(sensor.name,"DHT003_Hum",NAME_LEN);
+  strncpy(sensor.unit,"%",UNIT_LEN);
+  sensor.type=SensorType::DHT22_HUMIDITY;
+  DataHub::registerSensor(sensor);
   Serial.println("Setup beendet.");
 }
 
@@ -80,6 +130,18 @@ void switchRelays()
 
 void loop()
 {
+  static unsigned long now;
+  now=millis();
+  static unsigned long lastUpdate =0;
+  SensorManager::update(now);
+  if(now-lastUpdate>=3000){
+  DataHub::sensorDataToSerial();
+  lastUpdate=now;
+  }
+  
+  
+
+  /*
   static unsigned long lastRun = -40000UL; // Offset, damit der erste Durchlauf gleich nach dem Start passiert.
   if (millis() - lastRun >= 40000UL)
   {
@@ -93,4 +155,5 @@ void loop()
     Serial.printf("[HEAP] Frei: %u Bytes\n", ESP.getFreeHeap());
   }
   WiFiManager::checkRelayTimeouts();
+  */
 }

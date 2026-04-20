@@ -1,3 +1,5 @@
+#pragma once
+
 /**
  * @brief type of Sensor
  */

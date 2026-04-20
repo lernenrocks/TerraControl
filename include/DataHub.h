@@ -50,16 +50,19 @@ namespace DataHub
     struct SensorData
     {
         SensorType type = SensorType::UNKNOWN; /** <@brief sensor type — determines which API the SensorManager calls */
-        char name[NAME_LEN] = {};                        /** <@brief name or label */
-        float value = 0.0f;                              /** <@brief measured value */
-        char unit[UNIT_LEN] = {};                        /** <@brief unit of the measured value, e.g. °C or % */
-        bool inUse = false;                              /** <@brief sensor is registered and expected to be present */
-        bool online = false;                             /** <@brief last reading was successful; sensor is reachable and responding */
-        unsigned long lastUpdate = 0;                    /** <@brief timestamp of the last successful update */
-        bool dirty = true;                               /** <@brief flag for GUI */
-        unsigned long updateInterval = 10000;            /** <@brief update interval in ms */
-        char sourceMac[MAC_LEN] = {};                    /** <@brief empty for local sensors; MAC of remote ESP32-C3 node */
-        int sensorIndex = 0;                             /** <@brief DHT22: physical sensor 0–3 | Remote: sensor ID on the node */
+        char name[NAME_LEN] = {};              /** <@brief name or label */
+        float value = 0.0f;                    /** <@brief measured value */
+        float calMin = 0.0f;                   /** <@brief minimum calibration value for two point calibration (e.g. minimum soil humidity) */
+        float calMax = 0.0f;                   /** <@brief maximum calibration value for two point calibration (e.g. maximum soil humidity) */
+        float calOffset = 0.0f;                /** <@brief calibration valiue for offset (e.g. tara, or temperature) */
+        char unit[UNIT_LEN] = {};              /** <@brief unit of the measured value, e.g. °C or % */
+        bool inUse = false;                    /** <@brief sensor is registered and expected to be present */
+        bool online = false;                   /** <@brief last reading was successful; sensor is reachable and responding */
+        unsigned long lastUpdate = 0;          /** <@brief timestamp of the last successful update */
+        bool dirty = true;                     /** <@brief flag for GUI */
+        unsigned long updateInterval = 10000;  /** <@brief update interval in ms */
+        char sourceMac[MAC_LEN] = {};          /** <@brief empty for local sensors; MAC of remote ESP32-C3 node */
+        int sensorIndex = 0;                   /** <@brief DHT22: physical sensor 0–3 | Remote: sensor ID on the node */
     };
 
     struct DataHub
@@ -138,7 +141,7 @@ namespace DataHub
     /**
      * @brief registers a SensorData in an unused slot
      * @param in the SensorData entry to register
-     * @return the index of the registration. -2 if the array is full and -1 if there was a mutex error 
+     * @return the index of the registration. -2 if the array is full and -1 if there was a mutex error
      */
     int registerSensor(SensorData &in);
 
@@ -151,7 +154,7 @@ namespace DataHub
     /**
      * @brief setter for SensorData entry. Copies the entry into the DataHub, overwrites the old Data
      * @param in the Sensor entry
-     * @param id the index of the entry 
+     * @param id the index of the entry
      * @return returns true on success
      */
     bool setSensorData(SensorData &in, int id);
@@ -162,7 +165,7 @@ namespace DataHub
      * @param id identifier of the entry (not array index)
      * @return returns true on success
      */
-    bool getSensorData(SensorData &out, int id);
+    bool getSensorData(SensorData &out, int idx);
 
     /**
      * @brief getter for the SensorData Array, copies the array into the given reference
@@ -171,15 +174,12 @@ namespace DataHub
      */
     bool getSensorDataArray(SensorData (&out)[SENSOR_DATA_SIZE]);
 
-
-
-    //toString funktions
+    // toString funktions
     /**
      * @brief Loggt einen einzelnen WifiRelay-Eintrag auf Serial.
      * @param relay Referenz zum Eintrag.
      */
     void wifiRelayToSerial(const WifiRelay &relay);
-
 
     /**
      * @brief prints the sensorData Array to Serial for debugging
