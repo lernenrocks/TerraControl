@@ -44,6 +44,7 @@ The wiring diagram and the hardware list may contain errors.
 | Component | Description | Quantity |
 |---|---|---|
 | ESP32 DevKit V1 | ESP32-WROOM-32D, 38-pin | 1 |
+| Shelly Plug S | Smart Wi-Fi power plug | 1 - 12 | 
 | TFT Display | 3.2" SPI ILI9341 / XPT2046 Touch / SD-Card slot | 1 |
 | DS3231 RTC | I²C Real Time Clock with battery backup | 1 |
 | LIR2032 | Rechargeable backup battery for DS3231 | 1 |
