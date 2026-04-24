@@ -68,43 +68,82 @@ void setup()
   strncpy(sensor.unit,"°C",UNIT_LEN);
   sensor.type=SensorType::DHT22_TEMPERATURE;
   DataHub::registerSensor(sensor);
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
+  sensor.sensorIndex=0;
   strncpy(sensor.name,"DHT000_Hum",NAME_LEN);
   strncpy(sensor.unit,"%",UNIT_LEN);
   sensor.type=SensorType::DHT22_HUMIDITY;
   DataHub::registerSensor(sensor);
   
   //DHT01
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
   sensor.sensorIndex=1;
   strncpy(sensor.name,"DHT001_Temp",NAME_LEN);
   strncpy(sensor.unit,"°C",UNIT_LEN);
   sensor.type=SensorType::DHT22_TEMPERATURE;
   DataHub::registerSensor(sensor);
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
+  sensor.sensorIndex=1;
   strncpy(sensor.name,"DHT001_Hum",NAME_LEN);
   strncpy(sensor.unit,"%",UNIT_LEN);
   sensor.type=SensorType::DHT22_HUMIDITY;
   DataHub::registerSensor(sensor);
   
   //DHT02
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
   sensor.sensorIndex=2;
   strncpy(sensor.name,"DHT002_Temp",NAME_LEN);
   strncpy(sensor.unit,"°C",UNIT_LEN);
   sensor.type=SensorType::DHT22_TEMPERATURE;
   DataHub::registerSensor(sensor);
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
+  sensor.sensorIndex=2;
   strncpy(sensor.name,"DHT002_Hum",NAME_LEN);
   strncpy(sensor.unit,"%",UNIT_LEN);
   sensor.type=SensorType::DHT22_HUMIDITY;
   DataHub::registerSensor(sensor);
   
   //DHT03
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
   sensor.sensorIndex=3;
   strncpy(sensor.name,"DHT003_Temp",NAME_LEN);
   strncpy(sensor.unit,"°C",UNIT_LEN);
   sensor.type=SensorType::DHT22_TEMPERATURE;
   DataHub::registerSensor(sensor);
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
+  sensor.sensorIndex=3;
   strncpy(sensor.name,"DHT003_Hum",NAME_LEN);
   strncpy(sensor.unit,"%",UNIT_LEN);
   sensor.type=SensorType::DHT22_HUMIDITY;
   DataHub::registerSensor(sensor);
+
+  //Soil Moisture Sensor
+  sensor={};
+  sensor.inUse=true;
+  sensor.updateInterval=2000;
+  sensor.sensorIndex=0;
+  strncpy(sensor.name,"Soil Hum",NAME_LEN);
+  strncpy(sensor.unit,"%",UNIT_LEN);
+  sensor.type=SensorType::SOIL_MOISTURE;
+  sensor.calMax=1220.0f;
+  sensor.calMin=3080.0f;
+  DataHub::registerSensor(sensor);
+  
+Serial.printf("Größe SensorData: %d",sizeof(DataHub::SensorData));
   Serial.println("Setup beendet.");
 }
 

@@ -108,6 +108,12 @@ Sensoren die räumlich weit vom MainUnit entfernt sind (z.B. im Terrarium selbst
 ### Sensorgehäuse
 Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optisch in die Inneneinrichtung des Terrariums integrieren (z.B. als Stein, Ast, Fels).
 
+### Validprüfung analoger Sensoren
+`analogRead()` gibt immer einen Wert zurück — es gibt kein Read-Error wie bei DHT22. Validprüfung in `AnalogSensor::readValue()`:
+- **Einfach**: Rail-Werte `0` und `4095` als ungültig werten (`value > 0 && value < 4095`) — deckt Kurzschluss und offenen Pin ab
+- **Margin**: Nur nötig wenn der Sensor den vollen Spannungsbereich ausnutzt (z.B. Poti). Sensoren mit definiertem Arbeitsbereich (SEN0308: ~1200–3500) kommen nie in die Nähe der Rails — `> 0 && < 4095` reicht
+- **Kein Schalten bei ungültigem Wert**: `sensor.online` wird durch `SensorManager` auf `false` gesetzt — Schaltlogik prüft `online` vor jedem Schaltvorgang
+
 ---
 
 ## Steckverbindungen
@@ -175,6 +181,7 @@ Entscheidungskriterium: Sensoren ohne Library-Overhead bleiben am MainUnit, alle
 - `threshold` ist immer der sicherheitskritische Schaltpunkt — `hysteresis` verschiebt nur die unkritische Gegenseite
 - `activeAbove = true`: Relay ON wenn `value > threshold`, OFF wenn `value < threshold - hysteresis`
 - `activeAbove = false`: Relay ON wenn `value < threshold`, OFF wenn `value > threshold + hysteresis`
+- **Sicherheitsregel: Schaltlogik prüft `sensor.online` bevor sie schaltet — kein Schalten bei ungültigem Sensorwert.** Hintergrund: Ein ausgefallener Bodenfeuchtesensor darf nicht dauerhaft die Beregnungsanlage aktivieren. Relay bleibt im letzten validen Zustand bis `online` wieder `true`.
 
 ### Config-Persistenz
 - JSON ist das einheitliche Format für SD und NVS
