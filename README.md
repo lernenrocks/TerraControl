@@ -15,7 +15,7 @@ that was definitely not the plan.*
 
 - [x] WiFi connection and Shelly Plug Gen2/3 discovery via mDNS
 - [x] Shelly status retrieval and switching via SHA-256 Digest Auth, identified by MAC address — robust against IP reassignment
-- [ ] DHT22 sensor integration (local, 4 sensors)
+- [x] DHT22 sensor integration (local, 4 sensors), Soil Moisture Sensor (local 1 sensor) as analog Sensor
 - [ ] WiFiWorker — async WiFi task with request queue, replaces blocking polling loop
 - [ ] Remote sensors — generic sensor values fetched from secondary ESP32 devices (e.g. load cell, soil moisture) via WiFiWorker queue
 - [ ] RTC (DS3231) — timekeeping with timezone support, DST adjustment, NTP synchronization
@@ -48,6 +48,7 @@ The wiring diagram and the hardware list may contain errors.
 | DS3231 RTC | I²C Real Time Clock with battery backup | 1 |
 | LIR2032 | Rechargeable backup battery for DS3231 | 1 |
 | DHT22 | Temperature and humidity sensor | 4 |
+| Soil Moisture Sensor V 1.2 | Soil Moisture | 1 |
 | MB102 | Breadboard power supply 3.3V / 5V | 1 |
 | S8050 | NPN transistor, TO-92 | 1 |
 | Resistor | 1kΩ | 1 |
