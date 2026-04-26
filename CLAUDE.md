@@ -56,6 +56,14 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 ### Schaltvorgang
 `getStatus()` → `switchShelly()` → `getStatus()` (Verifikation)
 
+### Relay-Zykluslogik
+- **RelayMode** (Enum in `WifiRelay`): `AUTO` | `MANUAL_ON` | `MANUAL_OFF` | `FAULT`
+  - `AUTO`: Schaltlogik entscheidet anhand Sensorwerten
+  - `MANUAL_ON` / `MANUAL_OFF`: überschreibt Schaltlogik; Update-Funktion ignoriert Sensorwerte für dieses Relay
+  - `FAULT`: Schaltlogik überspringt dieses Relay; Watchdog meldet Critical Warning; User muss manuell quittieren
+- **Relay ON** (aktiv gehalten): `SWITCH_ON` + inline `getStatus` werden alle halbe Intervallzeit wiederholt — korrigiert unerwartetes Abfallen automatisch
+- **Relay OFF**: `SWITCH_OFF` + inline `getStatus`; wenn bestätigt → nur noch periodisches `GET_STATUS`; wenn nicht bestätigt → 2 Wiederholungen (~3s Pause) → bei anhaltendem Mismatch zwischen DataHub-State und Relay-State: `mode = FAULT`
+
 ### FreeRTOS
 - Aktuell: sequenziell und blockierend implementieren
 - `delay()` in TCP-Schleifen erst ersetzen wenn WiFiWorker-Thread eingeführt wird
@@ -63,11 +71,25 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - `delay(1)` hält den gesamten Core an — nach Umbau: `vTaskDelay(1 / portTICK_PERIOD_MS)`
 
 ### WiFiWorker (geplant)
-- Ein dedizierter FreeRTOS-Task mit zwei Queues
-  - High-Priority: `SWITCH_RELAY`, `GET_STATUS`
-  - Low-Priority: `NTP_SYNC`, `LOG_EVENT`, `NOTIFY`
+- Ein dedizierter FreeRTOS-Task
+- **Mailbox pro Relay** (`QueueHandle_t`, Länge 1, `xQueueOverwrite`): Befehle `SWITCH_ON`, `SWITCH_OFF`, `GET_STATUS` — neuester Befehl überschreibt vorhandenen
+- **STA-Queue**: `NTP_SYNC` (24h-Timer), `EXTERNAL_COMMAND` (event-driven, für spätere externe Steuerung)
+- **Update-Funktion** (Producer, läuft im Haupt-Task): prüft DataHub, schreibt bei Bedarf in Relay-Mailboxen
+- Priorität durch Abarbeitungsreihenfolge: Relay-Mailboxen → STA-Queue
+- Post-Switch-Verifikation (`getStatus`) läuft inline im Worker nach jedem Switch-Befehl — kein separater Queue-Eintrag
 - Alle Netzwerkoperationen laufen sequenziell im Worker — kein direktes TCP außerhalb
 - Umbau ist chirurgisch möglich solange alle TCP-Calls im `WiFiManager` gebündelt bleiben
+
+### WiFi-Netzwerkarchitektur
+- ESP32 betreibt **Soft-AP und STA gleichzeitig** (AP+STA-Dual-Mode)
+- **Soft-AP** (`ESP32_TerraControl_<ID>`): alle gesteuerten Geräte (Shellys, C3-Remote-Sensoren) verbinden sich direkt mit dem ESP32 — isoliert vom Heimnetz
+- **STA**: Verbindung zum Heimrouter — ausschließlich für NTP-Sync, Logging, spätere externe Commands; bleibt dauerhaft offen
+- Kein mDNS: Gerät-Discovery über `IP_EVENT_AP_STAIPASSIGNED` — liefert MAC + zugewiesene IP bei jedem Connect; MAC ist persistenter Identifier, IP wird im DataHub aktuell gehalten
+- Channel-Binding: Soft-AP und STA teilen einen Kanal (Hardware-Constraint) — Kanalwechsel des Routers führt zu kurzer Unterbrechung der AP-Clients (Reconnect in wenigen Sekunden); auf 2,4 GHz selten
+- Router-Ausfall unterbricht Kernfunktion nicht — Shellys und Sensoren bleiben über ESP32-AP erreichbar
+- **SSID ist der persistente Anker** für alle gebundenen Geräte (Shellys, C3-Sensoren) — SSID umbenennen trennt alle Verbindungen und erfordert vollständiges Re-Onboarding; Web-Interface muss das mit einer harten Warnung versehen
+- **Mehrere MainUnits** können denselben AP-Subnetzbereich nutzen — ihre APs sind vollständig isolierte L2-Netze mit unterschiedlichen SSIDs; IP-Konflikte zwischen MainUnits sind nicht möglich
+- **AP-Subnetz** (optional manuell setzbar): Standard `192.168.4.x`; einziger relevanter Konfliktfall ist Überlappung mit dem Heimnetz-Subnetz des Routers — beim STA-Connect wird das eigene Subnetz mit dem Router-Subnetz verglichen; bei Überlappung Warnung im Web-Interface; wird in NVS gespeichert
 
 ---
 
@@ -103,7 +125,7 @@ Jeder Sensor bekommt einen Wrapper, sodass Sensortypen je nach Terrarientyp ausg
 Sensoren müssen räumlich vom ESP32 getrennt sein — der ESP32 erzeugt Eigenwärme, die nahe platzierte Sensoren verfälscht.
 
 ### Remote-Sensoren (ESP32-C3 Super Mini)
-Sensoren die räumlich weit vom MainUnit entfernt sind (z.B. im Terrarium selbst) werden an einen **ESP32-C3 Super Mini** angeschlossen. Dieser übermittelt die Messwerte per WiFi an den MainUnit. Die Steckverbindung zum Sensor folgt dem gleichen Phoenix-Contact-Schema (MSTB/MSTBT, 3-polig). Kabel zwischen C3 und Sensor: 20–30cm.
+Sensoren die räumlich weit vom MainUnit entfernt sind werden an einen **ESP32-C3 Super Mini** angeschlossen, der **außerhalb** des Terrariums sitzt. Sensorkabel werden durch die Terrariumwand geführt (ca. 3mm Bohrung). Der MainUnit fragt den C3 per WiFi ab (Pull/On-Demand); der C3 liegt im Light Sleep zwischen den Abfragen. Kabelgebundene Stromversorgung — kein Akku. Die Steckverbindung zum Sensor folgt dem gleichen Phoenix-Contact-Schema (MSTB/MSTBT, 3-polig). Kabel zwischen C3 und Sensor: 20–30cm.
 
 ### Sensorgehäuse
 Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optisch in die Inneneinrichtung des Terrariums integrieren (z.B. als Stein, Ast, Fels).
@@ -132,20 +154,21 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 
 ### Implementierungsreihenfolge
 1. **DHT22** — lokal, synchron, kein Threading
-2. **WiFiWorker** — asynchroner WiFi-Task mit Request-Queue; Shelly-Polling wandert rein
-3. **Remote-Sensoren** — generische Sensorwerte von externen ESP32-Geräten via WiFiWorker-Queue
+2. **WiFiWorker + Soft-AP** — ESP32 spannt eigenen AP auf; Shellys migrieren auf ESP32-AP; mDNS entfällt; asynchroner WiFi-Task mit Relay-Mailboxen + STA-Queue
+3. **Remote-Sensoren** — generische Sensorwerte von externen ESP32-C3-Geräten; zunächst hardcoded Credentials; C3 im Light Sleep, wake-on-TCP; Pull/On-Demand-Modell konsistent mit verkabelten Sensoren
 4. **RTC (DS3231)** — eigener Struct, getrennt von SensorData
 5. **Schaltlogik** — ein Messwert pro Schaltentscheidung; zunächst hardcoded in `setup()`
 6. **JSON Config Layer** — Serialisierung/Deserialisierung aller Settings; zunächst hardcoded, dann dateibasiert
 7. **SD-Karte** — liest und schreibt Config als JSON; primärer Config-Eingabeweg
-8. **Display** *(optional — Flash-Budget entscheidet nach Schritt 7)*
-   - On-Device-Konfigurationstool: WLAN-Credentials, MACs und Namen für Shellys/Sensoren, Schaltregeln, Schwellwerte
-   - Operator-Interface: Sensorwerte, Relay-Zustände, manuelle Relay-Overrides
-   - Benötigt: Mehrfenster-Navigation, Bildschirmtastatur → LVGL
-   - LVGL ~300KB Flash — nur auf ESP32-Varianten mit ausreichend Flash
-   - **Fallback bei 4MB-Variante**: kein Display, stattdessen Monitoring per REST API — DataHub wird als JSON serialisiert und ausgeliefert; Konfiguration über SD-Karte
-   - **Weitere Optionen**: SD-Slot-Modul ohne Display, oder externer NAND-Speicher am ESP32
+8. **Onboarding-Wizard** — Komfortfunktion für Endnutzer; automatisches Binden neuer Shellys und C3-Sensoren ab Werksreset; liest MAC aus Gerät, konfiguriert WiFi + Auth; setzt SD-Karte voraus (Config-Persistenz)
 9. **NVS** — speichert letzte valide Config über Reboot; Umfang abhängig davon ob Display implementiert wurde
+10. **Display** *(optional — Flash-Budget entscheidet nach Schritt 7)*
+    - On-Device-Konfigurationstool: WLAN-Credentials, MACs und Namen für Shellys/Sensoren, Schaltregeln, Schwellwerte
+    - Operator-Interface: Sensorwerte, Relay-Zustände, manuelle Relay-Overrides
+    - Benötigt: Mehrfenster-Navigation, Bildschirmtastatur → LVGL
+    - LVGL ~300KB Flash — nur auf ESP32-Varianten mit ausreichend Flash
+    - **Fallback bei 4MB-Variante**: kein Display, stattdessen Monitoring per REST API — DataHub wird als JSON serialisiert und ausgeliefert; Konfiguration über SD-Karte
+    - **Weitere Optionen**: SD-Slot-Modul ohne Display, oder externer NAND-Speicher am ESP32
 
 ### Sensor-Architektur
 - `SensorEntry` ist generisch — ein Eintrag, ein Messwert (`float`), egal ob DHT22, Wägezelle oder Lichtsensor
@@ -168,10 +191,24 @@ Entscheidungskriterium: Sensoren ohne Library-Overhead bleiben am MainUnit, alle
 - SCD41 — I²C, Sensirion-Library
 - BH1750 / SI1145 — I²C, Library nötig (BH1750 klein ~2KB, Grenzfall)
 
+### Onboarding-Wizard
+- Gilt für Shellys und C3-Remote-Sensoren — ein gemeinsamer Mechanismus, gerätespezifisch nur der letzte Konfigurationsschritt
+- **Ablauf**: ESP32-STA verbindet temporär mit dem Factory-AP des Geräts (bekannter IP-Bereich, dokumentiert) → liest MAC automatisch via RPC → konfiguriert WiFi + Auth → Gerät verbindet sich mit ESP32-AP → MAC wird in Config gespeichert
+- **Shelly-Auth**: ein Account (`terracontrol`) mit generiertem Passwort, das nie angezeigt wird — MainUnit ist einziger Zugangspunkt
+- User hat keinen direkten Zugriff auf die Shelly — alle Konfiguration (inkl. LED) läuft ausschließlich über TerraControl
+- Shelly aus dem Verbund nehmen: Factory Reset am Gerät; TerraControl erkennt die MAC nicht mehr und entfernt den Eintrag
+- **Shelly-Härtung** (automatisch beim Onboarding): Cloud, BLE und MQTT werden deaktiviert (`Cloud.SetConfig`, `BLE.SetConfig`, `Mqtt.SetConfig`)
+- **LED-Konfiguration**: Farbe + Helligkeit für AN/AUS-Zustand, Nachtmodus (Zeitfenster + Helligkeit); Locate-Funktion (temporärer Blink per RPC zur physischen Identifikation)
+- **RPC-Proxy** für erweiterte Shelly-Features: `shellyRPC(mac, method, params, response, len)` — TerraControl übernimmt Auth und Routing, Caller liefert Methode und Parameter als Strings
+- **JSON an die Shelly ist modellunabhängig** — gleicher RPC für Plug S und Mehrfachdosen; Unterschied nur in der Anzahl der WifiRelay-Slots (ein Slot pro Switch-Komponente, gleiche MAC, unterschiedliche `id`)
+- C3-Onboarding: analoger Ablauf über C3-eigenen Provisioning-AP; übergibt AP-Credentials und Sensor-Konfiguration (Typ, ID, Intervall)
+
 ### Remote-Sensor-Protokoll
-- Remote-Knoten (ESP32-C3) werden analog zu Shellys über ihre **MAC-Adresse** identifiziert
-- Der Knoten meldet: Anzahl der Sensoren + pro Poll `[ { id, value }, ... ]`
-- Discovery: analog zu Shellys (mDNS o.ä.) — konkret beim WiFiWorker-Schritt entscheiden
+- Remote-Knoten (ESP32-C3) werden analog zu Shellys über ihre **MAC-Adresse** identifiziert; IP wird dynamisch via `IP_EVENT_AP_STAIPASSIGNED` aktuell gehalten
+- **Pull/On-Demand-Modell**: MainUnit fragt den C3 ab — konsistent mit verkabelten Sensoren und Shellys; kein Push
+- Antwortformat pro Poll: `[ { id, value }, ... ]`
+- C3 betreibt **Light Sleep** zwischen Abfragen: WiFi-Assoziation bleibt aktiv, eingehende TCP-Verbindung weckt den C3 sofort
+- C3 sitzt **außerhalb** des Terrariums; Sensorkabel wird durch die Terrariumwand geführt; kabelgebundene Stromversorgung
 - Der MainUnit fragt den Knoten ab; der Knoten trifft keine Schaltentscheidungen
 
 ### Schaltlogik
@@ -184,10 +221,18 @@ Entscheidungskriterium: Sensoren ohne Library-Overhead bleiben am MainUnit, alle
 - **Sicherheitsregel: Schaltlogik prüft `sensor.online` bevor sie schaltet — kein Schalten bei ungültigem Sensorwert.** Hintergrund: Ein ausgefallener Bodenfeuchtesensor darf nicht dauerhaft die Beregnungsanlage aktivieren. Relay bleibt im letzten validen Zustand bis `online` wieder `true`.
 
 ### Config-Persistenz
-- JSON ist das einheitliche Format für SD und NVS
-- SD: primärer Import-Weg für neue Setups
-- NVS: Fallback bei fehlender/defekter SD — speichert den von SD validierten JSON-String
-- NVS-Scope wächst mit Display: mehr System-Settings → mehr NVS-Inhalt
+- **NVS ist der primäre Config-Store** — einzige Wahrheitsquelle für alle Settings
+- **SD-Karte**: ausschließlich Logging — keine Config-Datenhaltung, keine Synchronisation
+- **Config-Update**: JSON POST via WiFi-Endpoint → DataHub → NVS; kein physischer Zugriff nötig
+- **Config-Export**: JSON GET via WiFi-Endpoint — Download als Backup; Wiederherstellung per POST
+- **Initialer Bootstrap**: `initDefaults()` beim ersten Boot wenn NVS leer — schreibt hardcodete Startwerte
+- NVS-Scope wächst mit den Features (WiFi-Credentials, Relay-Config, Sensor-Config, AP-Subnetz ...)
+
+### Factory Reset
+- **MainUnit**: löscht NVS vollständig → alle Config weg (WiFi-Credentials, gebundene Geräte, Schaltregeln) → startet mit `initDefaults()` neu → alle Shellys und C3-Sensoren müssen neu ongeboardet werden, da Auth-Credentials gelöscht sind
+- **Shelly**: Factory Reset am Gerät (Hardware-Taste) → geht in Werkszustand, öffnet eigenen AP → bereit für neues Onboarding
+- **C3-Remote-Sensor**: Factory Reset (Hardware-Taste oder Firmware-Flag) → startet Provisioning-AP → bereit für neues Onboarding
+- Web-Interface zeigt harte Warnung vor MainUnit-Reset: alle gebundenen Geräte müssen neu eingerichtet werden
 
 ---
 
@@ -201,14 +246,6 @@ Entscheidungskriterium: Sensoren ohne Library-Overhead bleiben am MainUnit, alle
 
 ### OTA
 - HTTP OTA vom Synology NAS — Voraussetzung für Remote-Bugfixes und Zertifikatswechsel
-
-### ESP als primärer AP für Shellys
-- ESP spannt eigenes WLAN auf (`ESP32_TerraControl_<ID>`), Shellys verbinden sich direkt
-- STA-Verbindung (Heimnetz) nur für Logging, NTP, OTA — Router-Ausfall unterbricht Kernfunktion nicht
-
-### Shelly-Onboarding direkt vom ESP
-- ESP verbindet sich mit Shelly-Werks-AP → konfiguriert per `WiFi.SetConfig` / `Sys.SetConfig` RPC
-- Nur Werkseinstellungs-Shellys bindbar
 
 ### Datenbank
 - InfluxDB für Zeitreihendaten, CouchDB/SQLite+REST für Konfiguration

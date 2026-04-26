@@ -1,3 +1,15 @@
+
+
+
+
+
+
+
+
+
+
+
+
 // WiFiManager - Neuaufbau
 // Minimale Struktur für ESP32 ohne angeschlossene Hardware
 

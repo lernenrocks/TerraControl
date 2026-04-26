@@ -13,17 +13,18 @@ that was definitely not the plan.*
 
 ## Roadmap
 
-- [x] WiFi connection and Shelly Plug Gen2/3 discovery via mDNS
-- [x] Shelly status retrieval and switching via SHA-256 Digest Auth, identified by MAC address — robust against IP reassignment
-- [x] DHT22 sensor integration (local, 4 sensors), Soil Moisture Sensor (local 1 sensor) as analog Sensor
-- [ ] WiFiWorker — async WiFi task with request queue, replaces blocking polling loop
-- [ ] Remote sensors — generic sensor values fetched from secondary ESP32 devices (e.g. load cell, soil moisture) via WiFiWorker queue
+- [x] Shelly Plug Gen2/3 status retrieval and switching via SHA-256 Digest Auth, identified by MAC address
+- [x] DHT22 sensor integration (local, 4 sensors), Soil Moisture Sensor (local 1 sensor) as analog sensor
+- [ ] Soft-AP — ESP32 as primary AP; Shellys migrate to ESP32 AP; mDNS replaced by event-driven MAC tracking via IP_EVENT_AP_STAIPASSIGNED
+- [ ] WiFiWorker — async WiFi task with per-relay mailbox queue; replaces blocking polling loop
+- [ ] Remote sensors — ESP32-C3 nodes in light sleep, polled on demand via WiFiWorker
 - [ ] RTC (DS3231) — timekeeping with timezone support, DST adjustment, NTP synchronization
 - [ ] Switching logic — connect a single sensor value to a Shelly relay, with threshold and time-based rules
 - [ ] JSON config layer — serialization/deserialization for all settings; initially hardcoded, later file-backed
 - [ ] SD card — load and store configuration as JSON; primary config input mechanism
-- [ ] Display *(optional — subject to flash budget; fallback: SPI card reader or USB-CDC)*
-- [ ] NVS — persist last valid configuration across reboots; scope depends on whether display is implemented
+- [ ] NVS — persist last valid configuration across reboots
+- [ ] Onboarding wizard — zero-config binding of new Shellys and C3 sensors from factory reset; automatic MAC registration, credential setup, and security hardening
+- [ ] Display *(optional — subject to flash budget; fallback: REST API monitoring + SD card config)*
 
 
 ## Hardware
@@ -44,6 +45,7 @@ The wiring diagram and the hardware list may contain errors.
 | Component | Description | Quantity |
 |---|---|---|
 | ESP32 DevKit V1 | ESP32-WROOM-32D, 38-pin | 1 |
+| ESP32-C3 Super Mini | Remote sensor node, one per sensor location outside the terrarium | 1 per remote sensor |
 | Shelly Plug S | Smart Wi-Fi power plug | 1 - 12 | 
 | TFT Display | 3.2" SPI ILI9341 / XPT2046 Touch / SD-Card slot | 1 |
 | DS3231 RTC | I²C Real Time Clock with battery backup | 1 |
