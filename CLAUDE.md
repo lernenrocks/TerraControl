@@ -2,7 +2,7 @@
 
 ## Was ist das hier?
 
-ESP32-Firmware zur Steuerung von Shelly Gen2/3-Relays über SHA-256 Digest Auth und mDNS-Discovery. Sensoren steuern zeitgesteuert und schwellwertbasiert das Schalten — ein Messwert pro Schaltentscheidung, keine Kombinationslogik.
+ESP32-Firmware zur Steuerung von Shelly Gen2/3-Relays über SHA-256 Digest Auth. Shellys verbinden sich direkt mit dem ESP32-Soft-AP — kein mDNS. Sensoren steuern zeitgesteuert und schwellwertbasiert das Schalten — ein Messwert pro Schaltentscheidung, keine Kombinationslogik.
 
 Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
@@ -12,6 +12,9 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
 - Moderne C++-Ansätze bevorzugen und erklären (z.B. anonymer Namespace statt `static` auf Dateiebene, `nullptr` statt `NULL`)
 - Der User lernt aktiv — neue Konzepte kurz erklären wenn sie eingesetzt werden
+- **Handle-Architektur (FreeRTOS-Queues, Tasks, Semaphoren) ist für den User schwer greifbar** — jeden Schritt erklären warum er so aussieht, nicht nur wie er aussieht; Blackbox-Vertrauen kostet Überblick und führt langfristig zu Frustration
+- **Kein mehrfacher Umbau** — Workarounds die beim nächsten Sprint ersetzt werden müssen aktiv vermeiden; saubere Lösung sofort, auch wenn der Sprint dadurch größer wird
+- **Überblick hat Priorität** — wenn der User den roten Faden verliert ohne es zu merken, holt ihn das später ein; lieber früh warnen wenn ein Schritt einen späteren Umbau erzwingt
 
 ---
 
@@ -40,8 +43,12 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 ## Architektur
 
 ### Module
-- **`DigestAuth`**: generisch, nur SHA-256 Digest Auth GET — keine Shelly-Logik, keine MAC-Logik
+- **`HttpClient`**: generischer HTTP-Client — `get()` für authentifizierte und nicht-authentifizierte GET-Requests; konsumiert Response-Header intern; Stream liegt am Body bei Rückgabe; enthält `readLine` und `skipHeader`
+- **`DigestAuth`**: SHA-256 Digest Auth — baut auf `HttpClient` auf; erster Request und WWW-Authenticate-Parsing selbst; zweiter Request über `HttpClient::get()` mit Authorization-Header; keine Shelly-Logik, keine MAC-Logik
+- **`NetworkUtils`**: Konvertierungen für MAC und IP — `normalizeMac`, `macBytesToChar`, `ipToChar`; kein HTTP-Bezug; löst `HttpUtils` ab
 - **`WiFiManager`**: alle TCP-Aufrufe gebündelt hier — nirgendwo sonst direktes TCP
+- **`WiFiWorker`**: dedizierter FreeRTOS-Task auf Core 0 — verwaltet Relay-Mailboxen, AP-Events und STA-Queue; einzige Stelle die `WiFiManager`-Funktionen aufruft
+- **`Controller`**: Schaltlogik-Orchestrator — läuft im Haupt-Task; prüft Relay-Zustände, schreibt Switch-Befehle in WiFiWorker-Mailboxen; kennt keine Netzwerkdetails
 - **`DataHub`**: einzige Datenschnittstelle — Getter/Setter, kein direkter Zugriff von außen
 - **`JsonParser`**: Eingangs-/Mapping-Layer, erzeugt DTOs (`RelayUpdate`) für DataHub
 - **`Watchdog`**: Laufzeitüberwachung, kein Eingriff in Schaltlogik — prüft inhaltliche Anomalien auf DataHub-Werten (z.B. Strom fließt obwohl `output == false`); zählt Parse-Fehler pro Relay und warnt ab Schwelle; Reaktionsstufen: `[WARN]` → Exception-Log (NVS/SD) → später Notification; kein automatischer Neustart
@@ -54,7 +61,7 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - Direkter Zugriff auf `dataHub.wifiRelay[]` ist verboten
 
 ### Schaltvorgang
-`getStatus()` → `switchShelly()` → `getStatus()` (Verifikation)
+`switchShelly()` → `GET_STATUS` (via Relay-Mailbox im WiFiWorker, inline nach Switch)
 
 ### Relay-Zykluslogik
 - **RelayMode** (Enum in `WifiRelay`): `AUTO` | `MANUAL_ON` | `MANUAL_OFF` | `FAULT`
@@ -65,20 +72,21 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - **Relay OFF**: `SWITCH_OFF` + inline `getStatus`; wenn bestätigt → nur noch periodisches `GET_STATUS`; wenn nicht bestätigt → 2 Wiederholungen (~3s Pause) → bei anhaltendem Mismatch zwischen DataHub-State und Relay-State: `mode = FAULT`
 
 ### FreeRTOS
-- Aktuell: sequenziell und blockierend implementieren
-- `delay()` in TCP-Schleifen erst ersetzen wenn WiFiWorker-Thread eingeführt wird
-- Umbau-Trigger: Remote-Sensoren — blockierende HTTP-Requests an externe ESP32-Geräte machen einen eigenen WiFiWorker-Task erforderlich, bevor Remote-Sensoren implementiert werden
-- `delay(1)` hält den gesamten Core an — nach Umbau: `vTaskDelay(1 / portTICK_PERIOD_MS)`
+- WiFiWorker läuft als eigener Task auf Core 0 (Priorität 5, Stack 8192 Bytes)
+- Arduino loop() läuft auf Core 1 — Controller und SensorManager laufen dort
+- `delay()` in TCP-Schleifen → `taskYIELD()` (gibt CPU ab ohne feste Wartezeit)
+- `vTaskDelay(pdMS_TO_TICKS(10))` am Ende jedes Worker-Zyklus — gibt anderen Tasks CPU-Zeit
 
-### WiFiWorker (geplant)
-- Ein dedizierter FreeRTOS-Task
+### WiFiWorker
+- Dedizierter FreeRTOS-Task, gestartet am Ende von `initWiFi()`
+- **`std::atomic<bool> apEventPending`**: WiFi-Event-Handler (ISR-Kontext) setzt Flag; Worker konsumiert mit `exchange(false)` race-frei
+- **`syncApClients()`**: liest via `esp_wifi_ap_get_sta_list()` + `esp_netif_get_sta_list()` alle verbundenen AP-Clients; vergleicht MAC+IP mit DataHub; schreibt `GET_STATUS` in Mailbox bei Änderung
 - **Mailbox pro Relay** (`QueueHandle_t`, Länge 1, `xQueueOverwrite`): Befehle `SWITCH_ON`, `SWITCH_OFF`, `GET_STATUS` — neuester Befehl überschreibt vorhandenen
-- **STA-Queue**: `NTP_SYNC` (24h-Timer), `EXTERNAL_COMMAND` (event-driven, für spätere externe Steuerung)
-- **Update-Funktion** (Producer, läuft im Haupt-Task): prüft DataHub, schreibt bei Bedarf in Relay-Mailboxen
-- Priorität durch Abarbeitungsreihenfolge: Relay-Mailboxen → STA-Queue
-- Post-Switch-Verifikation (`getStatus`) läuft inline im Worker nach jedem Switch-Befehl — kein separater Queue-Eintrag
+- **STA-Queue** (`QueueHandle_t`, Länge 8, `xQueueSend`): `NTP_SYNC`, `EXTERNAL_COMMAND` — für spätere Erweiterungen
+- **Remote-Sensor-Queue**: noch nicht implementiert — Platz reserviert in STA-Queue-Logik
+- Abarbeitungsreihenfolge: AP-Event → Relay-Mailboxen → STA-Queue → `vTaskDelay(10ms)`
+- Post-Switch-Verifikation (`GET_STATUS`) läuft inline via `updateRelayStatusInternal()` nach jedem Switch-Befehl
 - Alle Netzwerkoperationen laufen sequenziell im Worker — kein direktes TCP außerhalb
-- Umbau ist chirurgisch möglich solange alle TCP-Calls im `WiFiManager` gebündelt bleiben
 
 ### WiFi-Netzwerkarchitektur
 - ESP32 betreibt **Soft-AP und STA gleichzeitig** (AP+STA-Dual-Mode)
@@ -153,8 +161,8 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 ## Roadmap und Architekturentscheidungen
 
 ### Implementierungsreihenfolge
-1. **DHT22** — lokal, synchron, kein Threading
-2. **WiFiWorker + Soft-AP** — ESP32 spannt eigenen AP auf; Shellys migrieren auf ESP32-AP; mDNS entfällt; asynchroner WiFi-Task mit Relay-Mailboxen + STA-Queue
+1. ✅ **DHT22** — lokal, synchron, kein Threading
+2. ✅ **WiFiWorker + Soft-AP** — ESP32 spannt eigenen AP auf; Shellys verbinden sich direkt; mDNS entfällt; WiFiWorker-Task mit Relay-Mailboxen + STA-Queue; Controller-Modul für Schaltlogik (in Arbeit)
 3. **Remote-Sensoren** — generische Sensorwerte von externen ESP32-C3-Geräten; zunächst hardcoded Credentials; C3 im Light Sleep, wake-on-TCP; Pull/On-Demand-Modell konsistent mit verkabelten Sensoren
 4. **RTC (DS3231)** — eigener Struct, getrennt von SensorData
 5. **Schaltlogik** — ein Messwert pro Schaltentscheidung; zunächst hardcoded in `setup()`
@@ -272,11 +280,12 @@ Zu testende Funktionen:
 - `HttpUtils::readLine` — `\r\n`, Buffer voll, leere Zeile
 
 **Mocking**: `WiFiClient` als `FakeStream` (ist ein `Stream`)  
-**Nicht mockbar**: FreeRTOS-Mutex, WiFi-Connect, mDNS
+**Nicht mockbar**: FreeRTOS-Mutex, WiFi-Connect, AP-Client-Events
 
 **Integrationstests** (manuell, vor jedem Merge auf `main`):
-- Alle 3 Shellys per mDNS gefunden
-- MAC-Verifikation schlägt fehl bei unbekannter MAC
-- Schalten funktioniert (on/off)
-- Relay geht nach Timeout auf offline, wird durch `findStoredRelays` wiederhergestellt
+- Alle 3 Shellys verbinden sich mit ESP32-AP und werden als `online` markiert
+- Unbekannte MAC wird ignoriert (nicht in DataHub eingetragen)
+- Schalten funktioniert (on/off), `getStatus` nach Switch bestätigt Zustand
+- Shelly ziehen → TCP-Fehler → `setWifiRelayOfflineByIP` setzt `online = false`
+- Shelly wieder einstecken → AP-Connect-Event → `syncApClients` → `online = true` + `GET_STATUS`
 - Kein Absturz nach >5 Minuten Laufzeit

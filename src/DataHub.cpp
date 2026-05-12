@@ -1,5 +1,6 @@
-#include "DataHub.h"
 #include <Arduino.h>
+#include "DataHub.h"
+
 #define DATAHUB_MUTEX_TIMEOUT 100
 
 DataHub::DataHub dataHub;
@@ -83,7 +84,7 @@ namespace DataHub
         return true;
     }
 
-    bool getWifiRelayEntryByMac(WifiRelay &out, int &idx, const char *mac, const int id)
+    bool getWifiRelayEntry(WifiRelay &out, int &idx, const char *mac, const int id)
     {
         if (mac == nullptr)
         {
@@ -106,6 +107,22 @@ namespace DataHub
         }
         xSemaphoreGive(dataHubMutex);
         return found;
+    }
+
+    bool getWifiRelayEntry(WifiRelay &out, const int &idx)
+    {
+
+        if (idx >= RELAY_SIZE)
+        {
+            return false;
+        }
+        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            return false;
+        }
+        out = dataHub.wifiRelay[idx];
+        xSemaphoreGive(dataHubMutex);
+        return true;
     }
 
     bool getWifiRelayArray(WifiRelay (&out)[RELAY_SIZE])
@@ -221,6 +238,16 @@ namespace DataHub
         return true;
     }
 
+    bool getDataHub(DataHub &out){
+                if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
+        {
+            return false;
+        }
+        out = dataHub;
+        xSemaphoreGive(dataHubMutex);
+        return true;
+    }
+
     void dataHubToSerial()
     {
         if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
@@ -276,23 +303,10 @@ namespace DataHub
         Serial.println("--------------------------------------------------------");
         for (int i = 0; i < RELAY_SIZE; i++)
         {
-            auto &r = dataHub.wifiRelay[i];
-            if (!r.inUse)
+            if (!dataHub.wifiRelay[i].inUse)
                 continue;
-            unsigned long age = (r.lastUpdate > 0) ? (now - r.lastUpdate) / 1000 : 0;
-            const char *statusColor = r.online ? "\033[32m" : "\033[31m"; // grün / rot
-            const char *outputColor = r.output ? "\033[33m" : "\033[0m";  // gelb wenn ON
-            Serial.printf("[%d] %-12s  %s%-7s\033[0m  %s%-3s\033[0m  %6.3fA  %6.1fW %ddBm ",
-                          i,
-                          r.mac[0] ? r.mac : "(kein mac)",
-                          statusColor, r.online ? "ONLINE" : "OFFLINE",
-                          outputColor, r.output ? "ON" : "OFF",
-                          r.current, r.power,
-                          r.rssi);
-            if (r.lastUpdate == 0)
-                Serial.println("\033[33m(nie gesehen)\033[0m");
-            else
-                Serial.printf("(vor %lus)\n", age);
+            Serial.printf("[%d] ", i);
+            wifiRelayToSerial(dataHub.wifiRelay[i]);
         }
         Serial.println("========================================================");
         xSemaphoreGive(dataHubMutex);
@@ -307,13 +321,15 @@ namespace DataHub
                       relay.name,
                       relay.inUse ? "true" : "false",
                       relay.online ? "true" : "false");
-        Serial.printf("  output=%s voltage=%.1fV current=%.3fA power=%.1fW aenergy=%.3fkWh lastUpdate=%lu\n",
-                      relay.output ? "true" : "false",
-                      relay.voltage,
-                      relay.current,
-                      relay.power,
-                      relay.aenergy,
-                      relay.lastUpdate);
+        if (relay.lastUpdate == 0)
+            Serial.printf("  output=%s voltage=%.1fV current=%.3fA power=%.1fW aenergy=%.3fkWh (nie gesehen)\n",
+                          relay.output ? "true" : "false",
+                          relay.voltage, relay.current, relay.power, relay.aenergy);
+        else
+            Serial.printf("  output=%s voltage=%.1fV current=%.3fA power=%.1fW aenergy=%.3fkWh (vor %lus)\n",
+                          relay.output ? "true" : "false",
+                          relay.voltage, relay.current, relay.power, relay.aenergy,
+                          (millis() - relay.lastUpdate) / 1000);
     }
     void sensorDataToSerial()
     {
@@ -334,11 +350,20 @@ namespace DataHub
             const char *typeName = "UNKNOWN";
             switch (s.type)
             {
-            case SensorType::DHT22_TEMPERATURE: typeName = "DHT22_TEMP"; break;
-            case SensorType::DHT22_HUMIDITY:    typeName = "DHT22_HUM";  break;
-            case SensorType::SOIL_MOISTURE:     typeName = "SOIL";       break;
-            case SensorType::REMOTE_SENSOR:     typeName = "REMOTE";     break;
-            default: break;
+            case SensorType::DHT22_TEMPERATURE:
+                typeName = "DHT22_TEMP";
+                break;
+            case SensorType::DHT22_HUMIDITY:
+                typeName = "DHT22_HUM";
+                break;
+            case SensorType::SOIL_MOISTURE:
+                typeName = "SOIL";
+                break;
+            case SensorType::REMOTE_SENSOR:
+                typeName = "REMOTE";
+                break;
+            default:
+                break;
             }
             Serial.printf("[%d] %-16s  %s%-7s\033[0m  %8.2f %-4s  type=%-10s idx=%d  ",
                           i, s.name, statusColor, s.online ? "ONLINE" : "OFFLINE",

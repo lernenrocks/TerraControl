@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SensorTypes.h"
+#include "RelayTypes.h"
 
 #define IP_LEN 16
 #define MAC_LEN 13
@@ -14,6 +15,7 @@ namespace DataHub
     struct SystemData
     {
         char deviceName[NAME_LEN] = "TerraControl";
+        unsigned long relayStatusInterval_ms = 5000;
     };
 
     struct WiFiStatus
@@ -43,6 +45,8 @@ namespace DataHub
         float aenergy = 0.0f;         /**<@brief Verbrauch in kWh */
         unsigned long lastUpdate = 0; /**<@brief Zeitstempel, wenn das letzte mal die Dose angesprochen wurde */
         bool isDirty = true;          /**<@brief GUI relevante Änderungen wurden gemacht */
+        unsigned long switchDuration = 60000; /** <@brief time in ms how long switch is on, failsafe */
+        RelayTypes::RelayMode relayMode=RelayTypes::RelayMode::FORCED_OFF; /** <@brief relay mode, default off */
     };
     /**
      * @brief represents a sensor data entry
@@ -122,7 +126,15 @@ namespace DataHub
      * @param id Relay-ID des gesuchten Switch-Eintrags.
      * @return true wenn gefunden, false sonst.
      */
-    bool getWifiRelayEntryByMac(WifiRelay &out, int &idx, const char *mac, const int id);
+    bool getWifiRelayEntry(WifiRelay &out, int &idx, const char *mac, const int id);
+
+    /**
+     * @brief Getter for wifiRelay on given index.
+     * @param out requested wifiRelay entry.
+     * @param idx index of the requested entry
+     * @return true if found, false if not found
+     */
+    bool getWifiRelayEntry(WifiRelay &out, const int &idx);
 
     /**
      * @brief Kopiert das komplette WifiRelay-Array aus dem DataHub.
@@ -174,7 +186,14 @@ namespace DataHub
      */
     bool getSensorDataArray(SensorData (&out)[SENSOR_DATA_SIZE]);
 
-    // toString funktions
+    /**
+     * @brief getter for the whole DataHub
+     * @param out target buffer
+     * @return true on success
+     */
+    bool getDataHub(DataHub &out);
+
+    //################## toString funktions ####################
     /**
      * @brief Loggt einen einzelnen WifiRelay-Eintrag auf Serial.
      * @param relay Referenz zum Eintrag.

@@ -3,8 +3,7 @@
 #include <mbedtls/sha256.h>
 
 #include "DigestAuth.h"
-#include "HttpUtils.h"
-#include "DataHub.h"
+#include "HttpClient.h"
 
 // Puffer Größen
 #define SHA256_HEX_LEN 64
@@ -91,21 +90,7 @@ namespace
             sprintf(output + i * 2, "%02x", digest[i]);
         }
     }
-    /**
-     * @brief Extrahiert den HTTP-Statuscode aus der ersten Antwortzeile.
-     *
-     * Erwartet Format: "HTTP/1.1 200 OK"
-     *
-     * @param line  Erste Zeile der HTTP-Antwort
-     * @return HTTP-Statuscode als int (z.B. 200, 401), -1 wenn kein Code gefunden
-     */
-    int extractHTTPCode(char *line)
-    {
-        const char *space = strchr(line, ' ');
-        if (!space)
-            return -1;
-        return atoi(space + 1); // atoi ASCII zu Integer, bis zeichen nicht als Zahl interpretiert werden kann. nullptr, wenn nicht.
-    }
+
 }
 
 namespace DigestAuth
@@ -114,44 +99,33 @@ namespace DigestAuth
                           const char *user, const char *password, WiFiClient &wifiClient)
     {
 
-        if (!wifiClient.connect(ip, 80, 3000)) // öffne eine Verbindung zu IP zu Port 80 für maximal 3s
-        {                                      // öffnet TCP Verbung auf Port 80
-            Serial.println("WiFi Verbindung fehlgeschlagen");
-            wifiClient.stop();
+        // first handshake: retrieve auth challenge (realm, nonce)
+        int firstCode = HttpClient::sendGet(ip, uri, wifiClient);
+        if (firstCode == -1)
+        {
+            Serial.println("[ERROR] DigestAuth: Verbindung fehlgeschlagen");
             return -1;
         }
-        /*HTTP GET setzen, BSP:
-        GET /relay/0 HTTP/1.1\r\n
-        Host: 192.168.2.227\r\n
-        Connection: close\r\n
-        \r\n
-    */
-        char url[URL_PATH_LEN];
-        // 1. erste Verbindung, bekommt 401 mit Werten für die Hashberechnung im www-Authenticate header
-        snprintf(url, sizeof(url), "/%s", uri);
-        wifiClient.printf("GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url, ip);
 
-        char realm[REALM_MAX] = {}; // Initrialisierung mit 0, Falls nichts gefunden wird, enthält Array keinen Datenmüll
+        char realm[REALM_MAX] = {};
         char nonce[NONCE_MAX] = {};
         char lineBuffer[WWW_AUTHENTICATE_HEADER_MAX];
-        int code = 0;
         unsigned long start = millis();
-        while (wifiClient.connected() && (millis() - start) < TCP_MAX_TIME)
+        while ((wifiClient.connected() || wifiClient.available()) && (millis() - start) < TCP_MAX_TIME)
         {
             if (!wifiClient.available())
             {
-                delay(1); // TODO Umschreiben auf nicht blockierend
+                vTaskDelay(pdMS_TO_TICKS(10));
                 continue;
             }
-            // Auslesen einer Zeile der Antwort vom Server
-            size_t lineLen = HttpUtils::readLine(wifiClient, lineBuffer, sizeof(lineBuffer));
+            size_t lineLen = HttpClient::readLine(wifiClient, lineBuffer, sizeof(lineBuffer));
             if (lineLen == 0)
                 break;
-            // 2. Extrahiere realm und nonce
+            // 2. Extrahiere realm und nonce aus WWW-Authenticate
             /* Beispiel:
              Digest qop="auth", realm="shellyplugsg3-8cbfeaa03350", nonce="1773258266", algorithm=SHA-256
              */
-            if (strncmp(lineBuffer, "WWW-Authenticate:", 17) == 0) // Vergleicht den Abstand von lineBuffer und WWW-Authenticate für die ersten 17 Zeichen
+            if (strncmp(lineBuffer, "WWW-Authenticate:", 17) == 0)
             {
                 if (!extractValue(lineBuffer, "realm", realm, sizeof(realm)) || !extractValue(lineBuffer, "nonce", nonce, sizeof(nonce)))
                 {
@@ -160,6 +134,12 @@ namespace DigestAuth
                     return -1;
                 }
             }
+        }
+        if (realm[0] == '\0' || nonce[0] == '\0')
+        {
+            Serial.printf("[ERROR] DigestAuth: realm/nonce nicht erhalten (HTTP %d)\n", firstCode);
+            wifiClient.stop();
+            return -1;
         }
         // 3. Digest Response berechnen
         // ha1 = SHA256(user:realm:password)
@@ -194,36 +174,6 @@ namespace DigestAuth
                  "Digest username=\"%s\", realm=\"%s\", nonce=\"%s\", uri=\"%s\","
                  " algorithm=SHA-256, qop=auth, nc=%s, cnonce=\"%s\", response=\"%s\"",
                  user, realm, nonce, uri, nc, cnonce, responseHash);
-        // 2. TCP verbindung für den 2. request
-        if (!wifiClient.connect(ip, 80, 3000))
-        {
-            wifiClient.stop();
-            return -1;
-        }
-        wifiClient.printf(
-            "GET %s HTTP/1.1\r\n"
-            "Host: %s\r\n"
-            "Authorization: %s\r\n"
-            "Connection: close\r\n"
-            "\r\n",
-            url, ip, autorisationHeader);
-        start = millis();
-        while (wifiClient.connected() && (millis() - start) < TCP_MAX_TIME)
-        {
-            if (!wifiClient.available())
-            {
-                delay(1);
-                continue;
-            }
-            // Auslesen einer Zeile der Antwort vom Server
-            size_t lineLen = HttpUtils::readLine(wifiClient, lineBuffer, sizeof(lineBuffer));
-            if (lineLen == 0)
-                break;
-            //? bricht nach der ersten Zeile im Header ab. Falls weitere Zeilen verarbeitet werden sollen, Logic anpassen.
-            code = extractHTTPCode(lineBuffer);
-            if (code != -1)
-                break;
-        }
-        return code;
+        return HttpClient::get(ip, uri, wifiClient, autorisationHeader);
     }
 }

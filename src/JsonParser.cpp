@@ -1,5 +1,5 @@
 #include "JsonParser.h"
-#include "HttpUtils.h"
+#include "NetworkUtils.h"
 #include "DataHub.h"
 namespace
 {
@@ -26,57 +26,40 @@ namespace
             Serial.println("Mac nicht im Json enthalten");
             return ParseResult::FIELD_MISSING;
         }
-        if (!wifi.containsKey("sta_ip"))
-        {
-            Serial.println("IP nicht im Json enthalten");
-            return ParseResult::FIELD_MISSING;
-        }
         char mac[MAC_LEN] = {};
         strncpy(mac, sys["mac"], MAC_LEN - 1);
-        HttpUtils::normalizeMac(mac);
-        char ip[IP_LEN] = {};
-        strncpy(ip, wifi["sta_ip"], IP_LEN - 1);
+        NetworkUtils::normalizeMac(mac);
+        for (int i = 0; i < RELAY_SIZE; i++)
         {
-            for (int i = 0; i < RELAY_SIZE; i++)
+            char switchIdent[12] = {};
+            snprintf(switchIdent, sizeof(switchIdent), "switch:%d", i);
+            if (!switchStatusJson.containsKey(switchIdent))
             {
-                char switchIdent[12] = {};
-                snprintf(switchIdent, sizeof(switchIdent), "switch:%d", i);
-                if (!switchStatusJson.containsKey(switchIdent))
-                {
-                    continue;
-                }
-                JsonObject switchObject = switchStatusJson[switchIdent].as<JsonObject>();
-                if (!switchObject)
-                {
-                    continue;
-                }
-                int idx;
-                DataHub::WifiRelay entry;
-                DataHub::getWifiRelayEntryByMac(entry, idx, mac, i);
-                if (entry.inUse)
-                {
-                    if (strcmp(entry.ipV4Adress, ip) != 0)
-                    {
-                        strncpy(entry.ipV4Adress, ip, IP_LEN - 1);
-                        entry.rssi=wifi["rssi"]|0;
-                        entry.isDirty = true;
-                    }
-
-                    bool changed = parseWiFiRelayEntry(switchObject, entry);
-                    if(!entry.online){
-                        entry.online=true;
-                        changed=true;
-                    }
-                    if (changed || entry.isDirty)
-                    {
-                        entry.lastUpdate = millis();
-                        entry.isDirty = true;
-                        DataHub::setWifiRelayEntry(entry, idx);
-                    }
-                }
+                continue;
             }
-            return ParseResult::OK;
+            JsonObject switchObject = switchStatusJson[switchIdent].as<JsonObject>();
+            if (!switchObject)
+            {
+                continue;
+            }
+            int idx;
+            DataHub::WifiRelay entry;
+            DataHub::getWifiRelayEntry(entry, idx, mac, i);
+            if (entry.inUse)
+            {
+                entry.rssi = wifi["rssi"] | 0;
+                bool changed = parseWiFiRelayEntry(switchObject, entry);
+                if (!entry.online)
+                {
+                    entry.online = true;
+                    changed = true;
+                }
+                entry.lastUpdate = millis();
+                if (changed) entry.isDirty = true;
+                DataHub::setWifiRelayEntry(entry, idx);
+            }
         }
+        return ParseResult::OK;
     }
 
     /**
@@ -88,10 +71,6 @@ namespace
      */
     bool parseWiFiRelayEntry(const JsonObject &switchObjectJson, DataHub::WifiRelay &entry)
     {
-        //serializeJsonPretty(switchObjectJson, Serial);//Gib die Json auf der Konsole
-        //Serial.println();
-        //Serial.println("gefundener entry: ");
-        //DataHub::wifiRelayToSerial(entry);
         bool modified = false;
 
         bool newOutput = switchObjectJson["output"] | false;
