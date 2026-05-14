@@ -18,33 +18,19 @@ namespace WiFiManager
     void updateWifiStatus();
 
     /**
-     * @brief sucht nach mDNS Services und sendet ein GET Status. Prüft anhand der mac Adresse im
-     * Body, ob diese der WhiteList wifiRelay stehen. Ordnet die aktuelle IP zu, setzt diese online.
-     * @warning blockiert für 1s, damit alle mDNS besser gefunden werden.
-     * @note möglichst nur im setup() aufrufen.
-     */
-    void findStoredRelays();
-
-    /**
      * @brief Fragt den Shelly-Status unter der angegebenen IP ab und aktualisiert den DataHub.
      *        Setzt betroffene Entries bei Fehler auf offline.
      * @param ip IPv4-Adresse des Shelly als null-terminierter String.
-     * @return true bei erfolgreichem Abruf, false sonst.
+     * @return 200 bei Erfolg, -1 bei TCP-Verbindungsfehler, 0 bei Parse-Fehler, HTTP-Code sonst.
      */
-    bool updateRelayStatus(char *ip);
+    int updateRelayStatus(char *ip);
 
     /**
      * @brief Schaltet ein Relay eines Shelly per Legacy HTTP-Endpoint und aktualisiert danach den Status.
-     * @param mac MAC-Adresse des Shelly (normalisiert, ohne Trennzeichen).
-     * @param id Relay-ID (0-basiert).
-     * @param on true = einschalten, false = ausschalten.
-     * @param duration Timer in Sekunden, nach dem das Relay automatisch zurückschaltet. 0 = kein Timer.
+     * @param relay wifiRelay entry to switch
+     * @param Switchon true = switch relay on, false = switch Relay off.
+     * @return true, if wifiRelay was found
      */
-    void switchRelay(const char *mac, int id, bool on, long duration);
+    bool switchRelay(DataHub::WifiRelay relay, bool switchOn);
 
-    /**
-     * @brief Prüft, wann ein Relay zum letzten mal geupdatet wurde und löst nach einem
-     * einer definierten Zeit das erneute Finden aller wifiRelays aus.
-     */
-    void checkRelayTimeouts();
 }
