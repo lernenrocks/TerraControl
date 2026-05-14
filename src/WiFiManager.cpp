@@ -8,33 +8,13 @@
 #include "HttpClient.h"
 #include "JsonParser.h"
 #include "WiFiWorker.h"
-
-#define WIFI_CONNECTION_TIMEOUT 60000UL /**< @brief 60 Sekunden, um eine WiFi Verbindung aufzubauen */
+#define WIFI_CONNECTION_TIMEOUT 60000UL /**< @brief 60 second timeout for WiFi connection */
 
 #define URI_LEN 64
 
 const char uriShellyGetStatus[] = "rpc/Shelly.GetStatus";
 const char shellyUser[] = RELAY_USER;
 const char shellyPass[] = TERRA_CONTROL_PW;
-
-namespace
-{
-    /**
-     * @brief handler when client has connected to AP
-     */
-    void onApClientConnected(WiFiEvent_t, WiFiEventInfo_t)
-    {
-        WiFiWorker::notifyApEvent();
-    }
-    /**
-     * @brief handler when client has disconnected to AP
-     */
-    void onApClientDisconnected(WiFiEvent_t, WiFiEventInfo_t)
-    {
-        WiFiWorker::notifyApEvent();
-    }
-
-}
 
 namespace WiFiManager
 {
@@ -46,8 +26,6 @@ namespace WiFiManager
         DataHub::SystemData systemData;
         DataHub::getSystemData(systemData);
         WiFi.softAP(systemData.deviceName, AP_WIFI_PW); // set credentials for Access Point
-        WiFi.onEvent(onApClientConnected, ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED);
-        WiFi.onEvent(onApClientDisconnected, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
         WiFi.mode(WIFI_AP_STA);         // starts Access Point and Station Point Mode
         WiFi.setAutoConnect(true);      // try reconnect if connection is lost
         WiFi.begin(WIFI_SSID, WIFI_PW); // start Wifi with STA Credentials
@@ -77,7 +55,7 @@ namespace WiFiManager
             return;
         }
         DataHub::WiFiStatus status;
-        //? Umschreiben auf SSID aus preferences
+        //? rewrite to use SSID from preferences/NVS
         strncpy(status.ssid, WIFI_SSID, sizeof(status.ssid) - 1);
         IPAddress ip = WiFi.localIP();
         snprintf(status.ipV4Adress, sizeof(status.ipV4Adress),
@@ -104,18 +82,17 @@ namespace WiFiManager
             snprintf(uri, sizeof(uri), "rpc/Switch.Set?id=%d&on=false",
                      relay.id);
         }
-        Serial.println("Schalte Shelly:");
-        DataHub::wifiRelayToSerial(relay); // Debug
+       // Serial.println("Schalte Shelly:");
+       // DataHub::wifiRelayToSerial(relay); // Debug
         WiFiClient wifiClient;
         int code = DigestAuth::digestAuthRequest(relay.ipV4Adress, uri, shellyUser, shellyPass, wifiClient);
-        // Serial.printf("Rückgabewert von digestAuthGET: %d\n", code);
         wifiClient.stop();
         if (code != 200)
         {
-            Serial.printf("[ERROR] Switch.Set fehlgeschlagen, HTTP %d\n", code);
+            Serial.printf("[%lus][ERROR] Switch.Set fehlgeschlagen, HTTP %d\n", millis() / 1000, code);
             return false;
         }
-        return updateRelayStatus(relay.ipV4Adress) == 200;
+        return true;
     }
 
     int updateRelayStatus(char *ip)
@@ -125,7 +102,7 @@ namespace WiFiManager
         if (code != 200)
         {
             wifiClient.stop();
-            Serial.printf("[ERROR] GET_STATUS HTTP %d für %s\n", code, ip);
+            Serial.printf("[%lus][ERROR] GET_STATUS HTTP %d für %s\n", millis() / 1000, code, ip);
             return code;
         }
         unsigned long bodyWait = millis();
@@ -137,7 +114,7 @@ namespace WiFiManager
         bool success = JsonParser::parseJson(wifiClient, JsonParser::TargetType::WIFI_RELAY_STATUS) == JsonParser::ParseResult::OK;
         if (!success)
         {
-            Serial.println("[ERROR] Body Parsing Fehler in WiFiManager::updateRelayStatus");
+            Serial.printf("[%lus][ERROR] Body Parsing Fehler in WiFiManager::updateRelayStatus\n", millis() / 1000);
         }
         wifiClient.stop();
         return success ? 200 : 0;

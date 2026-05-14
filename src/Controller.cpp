@@ -24,13 +24,17 @@ namespace
         for (size_t i = 0; i < RELAY_SIZE; i++)
         {
             DataHub::WifiRelay &relay = dataHub.wifiRelay[i];
-            if (!relay.online)
+            if (!relay.inUse)
+            {
+                continue;
+            }
+            if (relay.ipV4Adress[0] == '\0' || strcmp(relay.ipV4Adress, "0.0.0.0") == 0)
             {
                 continue;
             }
             if (now - lastStatusRequest[i] > dataHub.systemData.relayStatusInterval_ms)
             {
-                Serial.printf("[CTRL] Relay[%d] %s → GET_STATUS\n", i, relay.name);
+               // Serial.printf("[CTRL] Relay[%d] %s → GET_STATUS\n", i, relay.name);
                 lastStatusRequest[i] = now;
                 WiFiWorker::queueRelayCommand(i, WiFiWorker::RelayCommand::GET_STATUS);
             }
@@ -55,7 +59,7 @@ namespace
                 if (now - lastSwitchOn[i] > relay.switchDuration / 3 ||
                     (!relay.output && now - lastSwitchOn[i] > SWITCH_RETRY_INTERVAL_MS))
                 {
-                    Serial.printf("[CTRL] Relay[%d] %s → SWITCH_ON\n", i, relay.name);
+                   // Serial.printf("[CTRL] Relay[%d] %s → SWITCH_ON\n", i, relay.name);
                     lastSwitchOn[i] = now;
                     WiFiWorker::queueRelayCommand(i, WiFiWorker::RelayCommand::SWITCH_ON);
                 }
@@ -63,7 +67,7 @@ namespace
             case RelayTypes::RelayMode::FORCED_OFF:
                 if (relay.output)
                 {
-                    Serial.printf("[CTRL] Relay[%d] %s → SWITCH_OFF\n", i, relay.name);
+                   // Serial.printf("[CTRL] Relay[%d] %s → SWITCH_OFF\n", i, relay.name);
                     WiFiWorker::queueRelayCommand(i, WiFiWorker::RelayCommand::SWITCH_OFF);
                 }
                 break;
@@ -88,7 +92,7 @@ namespace Controller
         }
         if (!DataHub::getDataHub(dataHub))
         {
-            Serial.println("[ERROR] DataHub nicht lesbar");
+            Serial.printf("[%lus][ERROR] DataHub nicht lesbar\n", millis() / 1000);
             return;
         }
 

@@ -47,7 +47,7 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - **`DigestAuth`**: SHA-256 Digest Auth — baut auf `HttpClient` auf; erster Request und WWW-Authenticate-Parsing selbst; zweiter Request über `HttpClient::get()` mit Authorization-Header; keine Shelly-Logik, keine MAC-Logik
 - **`NetworkUtils`**: Konvertierungen für MAC und IP — `normalizeMac`, `macBytesToChar`, `ipToChar`; kein HTTP-Bezug; löst `HttpUtils` ab
 - **`WiFiManager`**: alle TCP-Aufrufe gebündelt hier — nirgendwo sonst direktes TCP
-- **`WiFiWorker`**: dedizierter FreeRTOS-Task auf Core 0 — verwaltet Relay-Mailboxen, AP-Events und STA-Queue; einzige Stelle die `WiFiManager`-Funktionen aufruft
+- **`WiFiWorker`**: dedizierter FreeRTOS-Task auf Core 0 — verwaltet Relay-Mailboxen, periodischen AP-Sync und STA-Queue; einzige Stelle die `WiFiManager`-Funktionen aufruft
 - **`Controller`**: Schaltlogik-Orchestrator — läuft im Haupt-Task; prüft Relay-Zustände, schreibt Switch-Befehle in WiFiWorker-Mailboxen; kennt keine Netzwerkdetails
 - **`DataHub`**: einzige Datenschnittstelle — Getter/Setter, kein direkter Zugriff von außen
 - **`JsonParser`**: Eingangs-/Mapping-Layer, erzeugt DTOs (`RelayUpdate`) für DataHub
@@ -61,38 +61,40 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - Direkter Zugriff auf `dataHub.wifiRelay[]` ist verboten
 
 ### Schaltvorgang
-`switchShelly()` → `GET_STATUS` (via Relay-Mailbox im WiFiWorker, inline nach Switch)
+`WiFiManager::switchRelay()` → Worker queued `GET_STATUS` in Relay-Mailbox nach erfolgreichem Switch
 
 ### Relay-Zykluslogik
-- **RelayMode** (Enum in `WifiRelay`): `AUTO` | `MANUAL_ON` | `MANUAL_OFF` | `FAULT`
+- **RelayMode** (Enum in `WifiRelay`): `AUTO` | `FORCED_ON` | `FORCED_OFF`
   - `AUTO`: Schaltlogik entscheidet anhand Sensorwerten
-  - `MANUAL_ON` / `MANUAL_OFF`: überschreibt Schaltlogik; Update-Funktion ignoriert Sensorwerte für dieses Relay
-  - `FAULT`: Schaltlogik überspringt dieses Relay; Watchdog meldet Critical Warning; User muss manuell quittieren
+  - `FORCED_ON` / `FORCED_OFF`: überschreibt Schaltlogik; Controller ignoriert Sensorwerte für dieses Relay
+- **`bool broken`** (Flag in `WifiRelay`, kommt im Watchdog-Sprint): gesetzt vom Watchdog bei anhaltendem Mismatch; Controller überspringt das Relay und loggt `[WARN]`; orthogonal zum RelayMode — der vorherige Mode bleibt erhalten; User muss manuell quittieren (GUI/API)
 - **Relay ON** (aktiv gehalten): `SWITCH_ON` + inline `getStatus` werden alle halbe Intervallzeit wiederholt — korrigiert unerwartetes Abfallen automatisch
-- **Relay OFF**: `SWITCH_OFF` + inline `getStatus`; wenn bestätigt → nur noch periodisches `GET_STATUS`; wenn nicht bestätigt → 2 Wiederholungen (~3s Pause) → bei anhaltendem Mismatch zwischen DataHub-State und Relay-State: `mode = FAULT`
+- **Relay OFF**: `SWITCH_OFF` + inline `getStatus`; wenn bestätigt → nur noch periodisches `GET_STATUS`; wenn nicht bestätigt → 2 Wiederholungen (~3s Pause) → bei anhaltendem Mismatch zwischen DataHub-State und Relay-State: `relay.broken = true`
 
 ### FreeRTOS
 - WiFiWorker läuft als eigener Task auf Core 0 (Priorität 5, Stack 8192 Bytes)
 - Arduino loop() läuft auf Core 1 — Controller und SensorManager laufen dort
 - `delay()` in TCP-Schleifen → `taskYIELD()` (gibt CPU ab ohne feste Wartezeit)
-- `vTaskDelay(pdMS_TO_TICKS(10))` am Ende jedes Worker-Zyklus — gibt anderen Tasks CPU-Zeit
+- `vTaskDelay(pdMS_TO_TICKS(50))` am Ende jedes Worker-Zyklus — gibt anderen Tasks CPU-Zeit
 
 ### WiFiWorker
-- Dedizierter FreeRTOS-Task, gestartet am Ende von `initWiFi()`
-- **`std::atomic<bool> apEventPending`**: WiFi-Event-Handler (ISR-Kontext) setzt Flag; Worker konsumiert mit `exchange(false)` race-frei
-- **`syncApClients()`**: liest via `esp_wifi_ap_get_sta_list()` + `esp_netif_get_sta_list()` alle verbundenen AP-Clients; vergleicht MAC+IP mit DataHub; schreibt `GET_STATUS` in Mailbox bei Änderung
-- **Mailbox pro Relay** (`QueueHandle_t`, Länge 1, `xQueueOverwrite`): Befehle `SWITCH_ON`, `SWITCH_OFF`, `GET_STATUS` — neuester Befehl überschreibt vorhandenen
+- Dedizierter FreeRTOS-Task, gestartet am Ende von `initWiFi()`; keine WiFi-Event-Handler
+- **`syncApClients()`**: liest via `esp_wifi_ap_get_sta_list()` + `esp_netif_get_sta_list()` alle verbundenen AP-Clients; vergleicht MAC mit DataHub; aktualisiert IP wenn geändert; setzt `online = false` wenn MAC verschwunden — kein Queuing von `GET_STATUS`
+- **Periodischer AP-Sync**: `syncApClients()` läuft alle `relayStatusInterval_ms` im Worker-Zyklus — kein Event-Trigger
+- **`online`-Regeln**: `online = true` kommt ausschließlich vom JsonParser nach erfolgreichem GET_STATUS (HTTP 200); `online = false` bei GET_STATUS result == -1 (TCP-Fehler) oder wenn MAC in `syncApClients` nicht mehr sichtbar
+- **`GET_STATUS_BACKOFF_MS = 5000`**: nach fehlgeschlagenem GET_STATUS (result ≠ 200) pausiert der Worker 5s vor dem nächsten Versuch für dieses Relay
+- **Mailbox pro Relay** (`QueueHandle_t`, Länge 1, `xQueueOverwrite`): Befehle `SWITCH_ON`, `SWITCH_OFF`, `GET_STATUS` — neuester Befehl überschreibt vorhandenen; SWITCH nur ausgeführt wenn `online = true`; GET_STATUS auch bei `online = false` (Reconnect-Erkennung)
 - **STA-Queue** (`QueueHandle_t`, Länge 8, `xQueueSend`): `NTP_SYNC`, `EXTERNAL_COMMAND` — für spätere Erweiterungen
 - **Remote-Sensor-Queue**: noch nicht implementiert — Platz reserviert in STA-Queue-Logik
-- Abarbeitungsreihenfolge: AP-Event → Relay-Mailboxen → STA-Queue → `vTaskDelay(10ms)`
-- Post-Switch-Verifikation (`GET_STATUS`) läuft inline via `updateRelayStatusInternal()` nach jedem Switch-Befehl
+- Abarbeitungsreihenfolge: periodischer AP-Sync → Relay-Mailboxen → STA-Queue → `vTaskDelay(50ms)`
+- Post-Switch-Verifikation: Worker queued `GET_STATUS` in Relay-Mailbox nach erfolgreichem `switchRelay()`
 - Alle Netzwerkoperationen laufen sequenziell im Worker — kein direktes TCP außerhalb
 
 ### WiFi-Netzwerkarchitektur
 - ESP32 betreibt **Soft-AP und STA gleichzeitig** (AP+STA-Dual-Mode)
 - **Soft-AP** (`ESP32_TerraControl_<ID>`): alle gesteuerten Geräte (Shellys, C3-Remote-Sensoren) verbinden sich direkt mit dem ESP32 — isoliert vom Heimnetz
 - **STA**: Verbindung zum Heimrouter — ausschließlich für NTP-Sync, Logging, spätere externe Commands; bleibt dauerhaft offen
-- Kein mDNS: Gerät-Discovery über `IP_EVENT_AP_STAIPASSIGNED` — liefert MAC + zugewiesene IP bei jedem Connect; MAC ist persistenter Identifier, IP wird im DataHub aktuell gehalten
+- Kein mDNS: Gerät-Discovery über periodisches `syncApClients()`-Polling im WiFiWorker — liest MAC + IP aller verbundenen AP-Clients via `esp_netif_get_sta_list`; MAC ist persistenter Identifier, IP wird im DataHub aktuell gehalten; keine WiFi-Event-Handler
 - Channel-Binding: Soft-AP und STA teilen einen Kanal (Hardware-Constraint) — Kanalwechsel des Routers führt zu kurzer Unterbrechung der AP-Clients (Reconnect in wenigen Sekunden); auf 2,4 GHz selten
 - Router-Ausfall unterbricht Kernfunktion nicht — Shellys und Sensoren bleiben über ESP32-AP erreichbar
 - **SSID ist der persistente Anker** für alle gebundenen Geräte (Shellys, C3-Sensoren) — SSID umbenennen trennt alle Verbindungen und erfordert vollständiges Re-Onboarding; Web-Interface muss das mit einer harten Warnung versehen

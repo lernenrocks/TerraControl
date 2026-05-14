@@ -40,44 +40,27 @@ void setup()
   Serial.println("Bereit für WiFiManager Neuaufbau\n");
   DataHub::initDataHub();
 
-  // --- Test: unterschiedliche switchDuration und Modi ---
   DataHub::WifiRelay relay = {};
   relay.inUse = true;
   relay.id = 0;
-  relay.relayMode = RelayTypes::RelayMode::FORCED_ON;
-  relay.switchDuration = 30000;
+  relay.relayMode = RelayTypes::RelayMode::FORCED_OFF;
+  relay.switchDuration = 60000;
   strncpy(relay.mac, TERRA_CONTOL_000_MAC_STR, sizeof(relay.mac) - 1);
   DataHub::setWifiRelayEntry(relay, 0);
   relay = {};
   relay.inUse = true;
   relay.id = 0;
-  relay.relayMode = RelayTypes::RelayMode::FORCED_ON;
-  relay.switchDuration = 120000;
+  relay.relayMode = RelayTypes::RelayMode::FORCED_OFF;
+  relay.switchDuration = 60000;
   strncpy(relay.mac, TERRA_CONTOL_001_MAC_STR, sizeof(relay.mac) - 1);
   DataHub::setWifiRelayEntry(relay, 1);
   relay = {};
   relay.inUse = true;
   relay.id = 0;
   relay.relayMode = RelayTypes::RelayMode::FORCED_OFF;
+  relay.switchDuration = 60000;
   strncpy(relay.mac, TERRA_CONTOL_002_MAC_STR, sizeof(relay.mac) - 1);
   DataHub::setWifiRelayEntry(relay, 2);
-
-  // --- Standard Initialisierung (ohne Modi) ---
-  // DataHub::WifiRelay relay = {};
-  // relay.inUse = true;
-  // relay.id = 0;
-  // strncpy(relay.mac, TERRA_CONTOL_000_MAC_STR, sizeof(relay.mac) - 1);
-  // DataHub::setWifiRelayEntry(relay, 0);
-  // relay = {};
-  // relay.inUse = true;
-  // relay.id = 0;
-  // strncpy(relay.mac, TERRA_CONTOL_001_MAC_STR, sizeof(relay.mac) - 1);
-  // DataHub::setWifiRelayEntry(relay, 1);
-  // relay = {};
-  // relay.inUse = true;
-  // relay.id = 0;
-  // strncpy(relay.mac, TERRA_CONTOL_002_MAC_STR, sizeof(relay.mac) - 1);
-  // DataHub::setWifiRelayEntry(relay, 2);
 
   WiFiManager::initWiFi();
   WiFiManager::updateWifiStatus();

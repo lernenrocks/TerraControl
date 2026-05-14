@@ -25,9 +25,5 @@ namespace WiFiWorker{
      */
     void queueStaCommand(const StaMessage &message);
 
-    /**
-     * @brief a connect or disconnect to AP happened
-     */
-    void notifyApEvent();
 
 }

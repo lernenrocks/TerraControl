@@ -15,8 +15,8 @@ that was definitely not the plan.*
 
 - [x] Shelly Plug Gen2/3 status retrieval and switching via SHA-256 Digest Auth, identified by MAC address
 - [x] DHT22 sensor integration (local, 4 sensors), Soil Moisture Sensor (local 1 sensor) as analog sensor
-- [ ] Soft-AP — ESP32 as primary AP; Shellys migrate to ESP32 AP; mDNS replaced by event-driven MAC tracking via IP_EVENT_AP_STAIPASSIGNED
-- [ ] WiFiWorker — async WiFi task with per-relay mailbox queue; replaces blocking polling loop
+- [x] Soft-AP — ESP32 as primary AP; Shellys connect directly to ESP32 AP; mDNS replaced by periodic MAC/IP polling via syncApClients
+- [x] WiFiWorker — async FreeRTOS task on Core 0 with per-relay mailbox queues, periodic AP sync, and GET_STATUS backoff
 - [ ] Remote sensors — ESP32-C3 nodes in light sleep, polled on demand via WiFiWorker
 - [ ] RTC (DS3231) — timekeeping with timezone support, DST adjustment, NTP synchronization
 - [ ] Switching logic — connect a single sensor value to a Shelly relay, with threshold and time-based rules

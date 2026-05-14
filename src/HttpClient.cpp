@@ -7,9 +7,9 @@
 namespace
 {
     /**
-     * @brief Überspringt den kompletten HTTP-Header im Stream.
-     *        Liest so lange Zeilen, bis eine Leerzeile (\\r\\n) erscheint.
-     * @param client Geöffneter WiFiClient-Stream.
+     * @brief Skips the complete HTTP header in the stream.
+     *        Reads lines until an empty line (CRLF) appears.
+     * @param client Open WiFiClient stream.
      */
     void skipHeader(WiFiClient &client)
     {
@@ -19,19 +19,19 @@ namespace
         }
     }
         /**
-     * @brief Extrahiert den HTTP-Statuscode aus der ersten Antwortzeile.
+     * @brief Extracts the HTTP status code from the first response line.
      *
-     * Erwartet Format: "HTTP/1.1 200 OK"
+     * Expected format: "HTTP/1.1 200 OK"
      *
-     * @param line  Erste Zeile der HTTP-Antwort
-     * @return HTTP-Statuscode als int (z.B. 200, 401), -1 wenn kein Code gefunden
+     * @param line  First line of the HTTP response
+     * @return HTTP status code as int (e.g. 200, 401), -1 if not found
      */
     int extractHTTPCode(char *line)
     {
         const char *space = strchr(line, ' ');
         if (!space)
             return -1;
-        return atoi(space + 1); // atoi ASCII zu Integer, bis zeichen nicht als Zahl interpretiert werden kann. nullptr, wenn nicht.
+        return atoi(space + 1);
     }
 }
 
@@ -54,7 +54,7 @@ namespace HttpClient
         char lineBuffer[HTTP_HEADER_LINE_MAX];
         int code = 0;
         unsigned long start = millis();
-        while (client.connected() && (millis() - start) < TCP_MAX_TIME)
+        while ((client.connected() || client.available()) && (millis() - start) < TCP_MAX_TIME)
         {
             if (!client.available())
             {
@@ -77,8 +77,17 @@ namespace HttpClient
     size_t readLine(WiFiClient &client, char *buffer, size_t bufferSize)
     {
         size_t len = 0;
-        while (client.available() && len < bufferSize - 1)
+        unsigned long start = millis();
+        while (len < bufferSize - 1)
         {
+            if (!client.available())
+            {
+                if (!client.connected() || (millis() - start) >= TCP_MAX_TIME)
+                    break;
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue;
+            }
+            start = millis();
             char c = client.read();
             if (c == '\n')
                 break;
@@ -86,8 +95,7 @@ namespace HttpClient
                 buffer[len++] = c;
         }
         buffer[len] = '\0';
-        // DEBUG drinnen lassen für Bugfixing
-        //  Serial.println(buffer);
+        //Serial.println(buffer);
         return len;
     }
 
@@ -107,7 +115,7 @@ namespace HttpClient
 
         char lineBuffer[HTTP_HEADER_LINE_MAX];
         unsigned long start = millis();
-        while (client.connected() && (millis() - start) < TCP_MAX_TIME)
+        while ((client.connected() || client.available()) && (millis() - start) < TCP_MAX_TIME)
         {
             if (!client.available())
             {

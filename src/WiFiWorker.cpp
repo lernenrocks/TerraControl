@@ -3,19 +3,21 @@
 #include "freertos/task.h"
 #include "esp_wifi.h"
 #include "esp_netif_sta_list.h"
-#include <atomic>
 #include "WiFiWorker.h"
 #include "WiFiManager.h"
 #include "DataHub.h"
 #include "NetworkUtils.h"
 #include <Arduino.h>
 
+#define WORKER_DELAY_MS 50UL
+#define GET_STATUS_BACKOFF_MS 5000UL
+
 namespace
 {
-
     QueueHandle_t relayMailBox[RELAY_SIZE];
     QueueHandle_t staQueue;
-    std::atomic<bool> apEventPending{false};
+    unsigned long lastApSync = 0;
+    unsigned long lastFailTime[RELAY_SIZE] = {};
 
     enum class MacIpStatus
     {
@@ -26,14 +28,13 @@ namespace
 
     void syncApClients()
     {
-        Serial.println("AP Clients sync");
         wifi_sta_list_t staList = {};
         esp_netif_sta_list_t netifList = {};
         esp_wifi_ap_get_sta_list(&staList);
         esp_netif_get_sta_list(&staList, &netifList);
 
         DataHub::WifiRelay relays[RELAY_SIZE] = {};
-        if (DataHub::getWifiRelayArray(relays) != true)
+        if (!DataHub::getWifiRelayArray(relays))
         {
             return;
         }
@@ -44,7 +45,6 @@ namespace
                 continue;
             }
             bool found = false;
-            bool changed = false;
             for (size_t j = 0; j < netifList.num; j++)
             {
                 // check for mac
@@ -53,27 +53,22 @@ namespace
                 if (strcmp(mac, relays[i].mac) == 0)
                 { // found
                     found = true;
-                    // check for ip, if found
+                    // update IP if changed
                     char ip[IP_LEN + 1] = {};
                     NetworkUtils::ipToChar(ip, netifList.sta[j].ip.addr, sizeof(ip));
                     if (strcmp(ip, relays[i].ipV4Adress) != 0)
                     {
                         strncpy(relays[i].ipV4Adress, ip, sizeof(relays[i].ipV4Adress) - 1);
-                        changed = true;
+                        DataHub::setWifiRelayEntry(relays[i], i);
                     }
+                    break;
                 }
             }
-            if (relays[i].online != found)
+            // MAC gone but relay still marked online
+            if (!found && relays[i].online)
             {
-                relays[i].online = found;
-                changed = true;
-            }
-            if (changed)
-            {
-                relays[i].isDirty = true;
+                relays[i].online = false;
                 DataHub::setWifiRelayEntry(relays[i], i);
-                WiFiWorker::RelayCommand cmd = WiFiWorker::RelayCommand::GET_STATUS;
-                xQueueOverwrite(relayMailBox[i], &cmd);
             }
         }
     }
@@ -110,9 +105,13 @@ namespace
     {
         while (true)
         {
-            // @node handle AP Event
-            if (apEventPending.exchange(false))
+            // periodic AP client sync — IP mapping and offline detection
+            unsigned long now = millis();
+            DataHub::SystemData sys = {};
+            DataHub::getSystemData(sys);
+            if (now - lastApSync >= sys.relayStatusInterval_ms)
             {
+                lastApSync = now;
                 syncApClients();
             }
             // @note handle Switch Commands
@@ -126,7 +125,7 @@ namespace
                     {
                         continue;
                     }
-                    if (!relay.online)
+                    if (!relay.online && command != WiFiWorker::RelayCommand::GET_STATUS)
                     {
                         continue;
                     }
@@ -134,33 +133,46 @@ namespace
                     {
                     case WiFiWorker::RelayCommand::GET_STATUS:
                     {
-                        Serial.printf("[WORKER] Relay %d: GET_STATUS\n", i);
-                        int result = WiFiManager::updateRelayStatus(relay.ipV4Adress);
-                        if (result == -1)
+                        if (millis() - lastFailTime[i] < GET_STATUS_BACKOFF_MS)
                         {
-                            Serial.printf("[WORKER] Relay %d: GET_STATUS fehlgeschlagen, AP-Sync ausgelöst\n", i);
-                            apEventPending = true;
+                            break;
                         }
-                        else if (result != 200)
+                        int result = WiFiManager::updateRelayStatus(relay.ipV4Adress);
+                        if (result != 200)
                         {
-                            Serial.printf("[WORKER] Relay %d: GET_STATUS fehlgeschlagen (HTTP %d)\n", i, result);
+                            lastFailTime[i] = millis();
+                            if (result == -1)
+                            {
+                                relay.online = false;
+                                DataHub::setWifiRelayEntry(relay, i);
+                                Serial.printf("[%lus][WORKER] Relay %d: nicht erreichbar\n", millis() / 1000, i);
+                            }
+                            else
+                            {
+                                Serial.printf("[%lus][WORKER] Relay %d: GET_STATUS fehlgeschlagen (HTTP %d)\n", millis() / 1000, i, result);
+                            }
                         }
                         break;
                     }
-                    case WiFiWorker::RelayCommand::SWITCH_ON:[[fallthrough]];
+                    case WiFiWorker::RelayCommand::SWITCH_ON:
+                        [[fallthrough]];
                     case WiFiWorker::RelayCommand::SWITCH_OFF:
                     {
                         MacIpStatus status = checkMacIpStatus(relay);
                         switch (status)
                         {
                         case MacIpStatus::NOT_CONNECTED:
-                            WiFiWorker::notifyApEvent();
+                            relay.online = false;
+                            DataHub::setWifiRelayEntry(relay, i);
                             break;
                         case MacIpStatus::IP_CHANGED:
-                            DataHub::setWifiRelayEntry(relay, i);[[fallthrough]];
+                            DataHub::setWifiRelayEntry(relay, i);
+                            [[fallthrough]];
                         case MacIpStatus::IP_MATCH:
-                            if(!WiFiManager::switchRelay(relay, command == WiFiWorker::RelayCommand::SWITCH_ON)){
-                                apEventPending=true;
+                            if (WiFiManager::switchRelay(relay, command == WiFiWorker::RelayCommand::SWITCH_ON))
+                            {
+                                WiFiWorker::RelayCommand cmd = WiFiWorker::RelayCommand::GET_STATUS;
+                                xQueueOverwrite(relayMailBox[i], &cmd);
                             }
                             break;
                         default:
@@ -189,7 +201,7 @@ namespace
                     break;
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(WORKER_DELAY_MS));
         }
     }
 }
@@ -213,9 +225,5 @@ namespace WiFiWorker
     void queueStaCommand(const StaMessage &message)
     {
         xQueueSend(staQueue, &message, pdMS_TO_TICKS(100));
-    }
-    void notifyApEvent()
-    {
-        apEventPending = true;
     }
 }

@@ -114,7 +114,7 @@ namespace
 
 namespace JsonParser
 {
-    /** @note Nicht thread Safe. nur aus Wifi Worker Task aufrufen*/
+    /** @note Not thread-safe. Call from WiFiWorker task only. */
     static StaticJsonDocument<2048> doc;
 
     /**

@@ -19,11 +19,11 @@ namespace NetworkUtils
             byteMac[0],byteMac[1],byteMac[2],byteMac[3],byteMac[4],byteMac[5]);
     }
     void ipToChar(char *out, const uint32_t ip,size_t len){
-        // uint32_t garantiert exakt 32 Bit — portabel, unabhängig von der Plattform.
-        // ip speichert alle vier Oktette hintereinander (little-endian: erstes Oktett in den untersten Bits).
-        // 0xFF hat nur die untersten 8 Bit gesetzt, der Rest ist 0.
-        // & 0xFF isoliert das unterste Byte: AND mit 0 blockiert, AND mit 1 lässt den Originalwert durch.
-        // >> 8 schiebt das nächste Byte an die unterste Position, damit & 0xFF es wieder isolieren kann.
+        // uint32_t guarantees exactly 32 bits — portable across platforms.
+        // ip stores all four octets consecutively (little-endian: first octet in lowest bits).
+        // 0xFF has only the lowest 8 bits set, rest are 0.
+        // & 0xFF isolates the lowest byte: AND with 0 blocks, AND with 1 passes through.
+        // >> 8 shifts the next byte into the lowest position so & 0xFF can isolate it.
         snprintf(out, len, "%u.%u.%u.%u",
         ip & 0xFF,
         (ip >> 8) & 0xFF,

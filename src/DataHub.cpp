@@ -138,27 +138,6 @@ namespace DataHub
         xSemaphoreGive(dataHubMutex);
         return true;
     }
-    /**
-     * @brief Setzt alle WifiRelay-Einträge mit passender IP auf online=false.
-     *        IP-Adresse bleibt erhalten, damit der Eintrag bei erneutem Kontakt
-     *        ohne mDNS-Lookup wiederverwendet werden kann.
-     * @param ip IPv4-Adresse als null-terminierter String.
-     */
-    void setWifiRelayOfflineByIP(const char *ip)
-    {
-        if (xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(DATAHUB_MUTEX_TIMEOUT)) != pdTRUE)
-        {
-            return;
-        }
-        for (WifiRelay &entry : dataHub.wifiRelay)
-        {
-            if (strcmp(entry.ipV4Adress, ip) == 0)
-            {
-                entry.online = false;
-            }
-        }
-        xSemaphoreGive(dataHubMutex);
-    }
 
     int registerSensor(SensorData &in)
     {
