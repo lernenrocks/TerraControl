@@ -1,19 +1,17 @@
 #pragma once
 
-// WLAN-Zugangsdaten
+// Home router credentials (STA mode)
 #define WIFI_SSID "your-ssid"
 #define WIFI_PW "your-wifi-password"
 
-// Shelly-Zugangsdaten (Digest Auth)
-#define SHELLY_USER "admin"
+// ESP32 Soft-AP password (Shellys and remote sensors connect here)
+#define AP_WIFI_PW "your-ap-password"
+
+// Shelly credentials (Digest Auth)
+#define RELAY_USER "admin"
 #define TERRA_CONTROL_PW "your-shelly-password"
 
-// Shelly MACs (ohne Trennzeichen, Kleinbuchstaben)
-#define TERRA_CONTROL_000_NAME "TerraControlShelly000"
+// Shelly MACs (no separators, lowercase)
 #define TERRA_CONTOL_000_MAC_STR "aabbccddeeff"
-
-#define TERRA_CONTROL_001_NAME "TerraControlShelly001"
 #define TERRA_CONTOL_001_MAC_STR "aabbccddeeff"
-
-#define TERRA_CONTROL_002_NAME "TerraControlShelly002"
 #define TERRA_CONTOL_002_MAC_STR "aabbccddeeff"
