@@ -177,8 +177,10 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
     - Operator-Interface: Sensorwerte, Relay-Zustände, manuelle Relay-Overrides
     - Benötigt: Mehrfenster-Navigation, Bildschirmtastatur → LVGL
     - LVGL ~300KB Flash — nur auf ESP32-Varianten mit ausreichend Flash
-    - **Fallback bei 4MB-Variante**: kein Display, stattdessen Monitoring per REST API — DataHub wird als JSON serialisiert und ausgeliefert; Konfiguration über SD-Karte
+    - **Fallback bei 4MB-Variante**: kein Display — REST API + Companion-App übernehmen Konfiguration und Monitoring; bei Bedarf auf 8MB/16MB-Variante wechseln
     - **Weitere Optionen**: SD-Slot-Modul ohne Display, oder externer NAND-Speicher am ESP32
+11. **Eigenverbrauch** — INA219 (I2C) misst Spannung, Strom und Leistung von MainUnit und C3-Nodes; Werte landen im DataHub und sind über REST API abrufbar; Voraussetzung für glaubwürdige Stromverbrauchs-Transparenz gegenüber Endnutzern
+12. **Flash Encryption** — NVS-Verschlüsselung als erster Schritt (AES-256, Schlüssel in eFuse, Hardware-Beschleuniger); für Marktreife: Secure Boot + vollständige Flash-Verschlüsselung; verhindert Credential-Extraktion bei gestohlenen Geräten
 
 ### Sensor-Architektur
 - `SensorEntry` ist generisch — ein Eintrag, ein Messwert (`float`), egal ob DHT22, Wägezelle oder Lichtsensor
@@ -187,19 +189,6 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 - Lokale Sensoren schreiben direkt in DataHub; Remote-Sensoren legen Request in WiFiWorker-Queue
 - `valid` und `lastUpdate` in `SensorEntry` sind load-bearing — Schaltlogik muss Staleness prüfen
 
-### Sensor-Aufteilung MainUnit vs. Remote
-Entscheidungskriterium: Sensoren ohne Library-Overhead bleiben am MainUnit, alle anderen wandern auf ESP32-C3-Knoten — spart Flash für LVGL.
-
-**MainUnit (verdrahtet):**
-- DHT22 — Single-Wire, bereits auf Platine
-- DS3231 RTC — I²C, bereits auf Platine
-- SEN0308 (Bodenfeuchte) — reiner ADC-Read, keine Library
-
-**Remote (ESP32-C3):**
-- HX711 + Wägezelle — eigenes serielles Protokoll, Library nötig
-- DS18B20 — 1-Wire, Dallas-Library
-- SCD41 — I²C, Sensirion-Library
-- BH1750 / SI1145 — I²C, Library nötig (BH1750 klein ~2KB, Grenzfall)
 
 ### Onboarding-Wizard
 - Gilt für Shellys und C3-Remote-Sensoren — ein gemeinsamer Mechanismus, gerätespezifisch nur der letzte Konfigurationsschritt
@@ -214,12 +203,13 @@ Entscheidungskriterium: Sensoren ohne Library-Overhead bleiben am MainUnit, alle
 - C3-Onboarding: analoger Ablauf über C3-eigenen Provisioning-AP; übergibt AP-Credentials und Sensor-Konfiguration (Typ, ID, Intervall)
 
 ### Remote-Sensor-Protokoll
-- Remote-Knoten (ESP32-C3) werden analog zu Shellys über ihre **MAC-Adresse** identifiziert; IP wird dynamisch via `IP_EVENT_AP_STAIPASSIGNED` aktuell gehalten
+- Remote-Knoten (ESP32-C3) werden analog zu Shellys über ihre **MAC-Adresse** identifiziert; IP wird dynamisch via `syncApClients()` aktuell gehalten
 - **Pull/On-Demand-Modell**: MainUnit fragt den C3 ab — konsistent mit verkabelten Sensoren und Shellys; kein Push
-- Antwortformat pro Poll: `[ { id, value }, ... ]`
-- C3 betreibt **Light Sleep** zwischen Abfragen: WiFi-Assoziation bleibt aktiv, eingehende TCP-Verbindung weckt den C3 sofort
+- **Antwortformat** `GET /sensors`: `{"sensor:0": {"value": 58500}, "sensor:1": {"value": 217}}` — Rohwerte; Kalibrierung und Einheit liegen im MainUnit
+- **Antwortformat** `GET /status`: `{"mac": "AA:BB:CC:DD:EE:FF", "uptime": 3600, "rssi": -65}` — MAC ist persistenter Identifier, zwingend für Onboarding
+- C3 betreibt **Light Sleep** zwischen Abfragen: WiFi-Assoziation bleibt aktiv, eingehende TCP-Verbindung weckt den C3 sofort; spart Strom auch bei kabelgebundener Versorgung
 - C3 sitzt **außerhalb** des Terrariums; Sensorkabel wird durch die Terrariumwand geführt; kabelgebundene Stromversorgung
-- Der MainUnit fragt den Knoten ab; der Knoten trifft keine Schaltentscheidungen
+- Der MainUnit fragt den Knoten ab; der Knoten trifft keine Schaltentscheidungen; Kalibrierung liegt vollständig im MainUnit
 
 ### Schaltlogik
 - Generisch — kennt keinen Sensortyp, nur einen `float`-Wert aus dem DataHub
@@ -255,7 +245,9 @@ Entscheidungskriterium: Sensoren ohne Library-Overhead bleiben am MainUnit, alle
 - **⚠ ISRG Root X1 läuft ab: 30. September 2035 — OTA-Update auf Root X2 einplanen**
 
 ### OTA
-- HTTP OTA vom Synology NAS — Voraussetzung für Remote-Bugfixes und Zertifikatswechsel
+- **Companion-App triggert OTA** — REST-Endpoint auf MainUnit; MainUnit lädt Firmware vom NAS (via STA), aktualisiert sich selbst und serviert C3-Firmware lokal über den AP; C3-Nodes pullen und updaten sich selbst
+- ESP32-Standard-Partition-Scheme ist OTA-fähig (zwei App-Slots) — gilt für MainUnit und C3; kein physisches Reflashen nötig für zukünftige Updates
+- Voraussetzung: REST-API-Layer und SD-Karte (Firmware-Storage) müssen stehen
 
 ### Datenbank
 - InfluxDB für Zeitreihendaten, CouchDB/SQLite+REST für Konfiguration
