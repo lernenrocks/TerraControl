@@ -26,6 +26,7 @@ public:
     virtual void reset() = 0;
 
     const char *getType() const;
+    uint8_t getId() const;
 
     void getName(char *buffer, size_t len);
     bool setName(const char *name, size_t len);

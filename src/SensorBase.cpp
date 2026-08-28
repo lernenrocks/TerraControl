@@ -34,6 +34,11 @@ const char *SensorBase::getType() const
     return _type;
 }
 
+uint8_t SensorBase::getId() const
+{
+    return _id;
+}
+
 void SensorBase::getName(char *buffer, size_t len)
 {
     char ns[NvsStorage::KEY_NAME_MAX] = {};
