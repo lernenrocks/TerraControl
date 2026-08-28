@@ -14,6 +14,7 @@
 #include "SensorManager.h"
 #include "SensorTypes.h" // @note remove if loading from JSON is implemented
 #include "Controller.h"
+#include "NvsStorage.h"
 
 #define APP_VERSION "0.1"
 
@@ -35,7 +36,9 @@ void setup()
   // Serial.printf("\n=== BOOT START === (#%u, reset=%d)\n", bootCount, (int)rr);
   Serial.printf("Version: %s\n", APP_VERSION);
   Serial.printf("Freier Heap: %u Bytes\n", ESP.getFreeHeap());
-
+  NvsStorage::init();
+  
+  // FIXME old:
   Serial.println("\n--- Setup abgeschlossen ---");
   Serial.println("Bereit für WiFiManager Neuaufbau\n");
   DataHub::initDataHub();

@@ -3,15 +3,14 @@
 #include "nvs_flash.h"
 #include "Logger.h"
 
-#define NVS_MUTEX_TIMEOUT 100
-
 namespace
 {
     Preferences preferences;
     SemaphoreHandle_t nvsMutex = nullptr;
     bool begin(const char *pref_namespace, bool readOnly)
     {
-        if (xSemaphoreTake(nvsMutex, pdMS_TO_TICKS(NVS_MUTEX_TIMEOUT)) != pdTRUE)
+
+        if (xSemaphoreTake(nvsMutex, portMAX_DELAY) != pdTRUE)
         {
             return false;
         }
@@ -29,7 +28,7 @@ namespace NvsStorage
 {
     Session::Session(const char *pref_namespace, bool readOnly)
     {
-        if (begin(pref_namespace, readOnly))
+        if (!begin(pref_namespace, readOnly))
         {
             Logger::log(Logger::ErrorLevel::WARN, "could not open nvs!");
         }
@@ -38,7 +37,13 @@ namespace NvsStorage
     {
         end();
     }
-
+    void init()
+    {
+        if (nvsMutex == nullptr)
+        {
+            nvsMutex = xSemaphoreCreateMutex();
+        }
+    }
     void erase()
     {
         nvs_flash_erase();
@@ -59,6 +64,10 @@ namespace NvsStorage
     bool writeFloat(const char *key, const float value)
     {
         return preferences.putFloat(key, value) > 0;
+    }
+    bool writeInt(const char *key, const int value)
+    {
+        return preferences.putInt(key, value) > 0;
     }
 
     bool readBool(const char *key, bool &value)
@@ -83,7 +92,7 @@ namespace NvsStorage
     {
         if (!preferences.isKey(key))
         {
-            if (len > 0)// @note garantes valid empty string in every path
+            if (len > 0) // @note garantes valid empty string in every path
                 value[0] = '\0';
             return false;
         }
@@ -97,6 +106,15 @@ namespace NvsStorage
             return false;
         }
         value = preferences.getFloat(key);
+        return true;
+    }
+    bool readInt(const char *key, int &value)
+    {
+        if (!preferences.isKey(key))
+        {
+            return false;
+        }
+        value = preferences.getInt(key);
         return true;
     }
 
