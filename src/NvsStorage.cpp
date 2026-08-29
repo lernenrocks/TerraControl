@@ -7,13 +7,15 @@ namespace
 {
     Preferences preferences;
     SemaphoreHandle_t nvsMutex = nullptr;
+    char currentNamespace[NvsStorage::KEY_NAME_MAX] = {};
+
     bool begin(const char *pref_namespace, bool readOnly)
     {
-
         if (xSemaphoreTake(nvsMutex, portMAX_DELAY) != pdTRUE)
         {
             return false;
         }
+        strlcpy(currentNamespace, pref_namespace, sizeof(currentNamespace));
         return preferences.begin(pref_namespace, readOnly);
     }
     void end()
@@ -22,6 +24,12 @@ namespace
         xSemaphoreGive(nvsMutex);
     }
 
+    void logWriteFailure(const char *key)
+    {
+        char msg[64] = {};
+        snprintf(msg, sizeof(msg), "nvs write failed: %s/%s", currentNamespace, key);
+        Logger::log(Logger::ErrorLevel::WARN, msg);
+    }
 }
 
 namespace NvsStorage
@@ -51,23 +59,38 @@ namespace NvsStorage
     }
     bool writeBool(const char *key, const bool value)
     {
-        return preferences.putBool(key, value) > 0; // returns bytes written
+        bool success = preferences.putBool(key, value) > 0; // returns bytes written
+        if (!success)
+            logWriteFailure(key);
+        return success;
     }
     bool writeLong(const char *key, const long value)
     {
-        return preferences.putLong(key, value) > 0;
+        bool success = preferences.putLong(key, value) > 0;
+        if (!success)
+            logWriteFailure(key);
+        return success;
     }
     bool writeString(const char *key, const char *value)
     {
-        return preferences.putString(key, value) > 0;
+        bool success = preferences.putString(key, value) > 0;
+        if (!success)
+            logWriteFailure(key);
+        return success;
     }
     bool writeFloat(const char *key, const float value)
     {
-        return preferences.putFloat(key, value) > 0;
+        bool success = preferences.putFloat(key, value) > 0;
+        if (!success)
+            logWriteFailure(key);
+        return success;
     }
     bool writeInt(const char *key, const int value)
     {
-        return preferences.putInt(key, value) > 0;
+        bool success = preferences.putInt(key, value) > 0;
+        if (!success)
+            logWriteFailure(key);
+        return success;
     }
 
     bool readBool(const char *key, bool &value)

@@ -8,9 +8,8 @@ SensorBase::SensorBase(uint8_t id, const char *type)
 
 bool SensorBase::read(float &value, bool raw)
 {
-    if (!isValid())
+    if (!readRaw(value))
         return false;
-    readRaw(value);
     if (!raw)
     {
         // Lokale Defaults bewusst hier, nicht in den Gettern: Die Getter geben bei
@@ -20,8 +19,8 @@ bool SensorBase::read(float &value, bool raw)
         // Hier im sicherheitskritischen Pfad wird der Rückgabewert geprüft; die
         // lokalen Defaults sind nur ein zusätzliches Sicherheitsnetz für den Fall
         // eines Bugs in genau dieser Prüfung.
-        float scale = 1.0f;
-        float offset = 0.0f;
+        float scale = DEFAULT_SCALE;
+        float offset = DEFAULT_OFFSET;
         if (!getScale(scale) || !getOffset(offset))
             return false;
         value = value * scale + offset;
@@ -137,8 +136,8 @@ void SensorBase::ensureDefaults()
     float dummyScale;
     if (!NvsStorage::readFloat(VALUE_KEY_SCALE, dummyScale))
     {
-        NvsStorage::writeFloat(VALUE_KEY_SCALE, 1.0f);
-        NvsStorage::writeFloat(VALUE_KEY_OFFSET, 0.0f);
+        NvsStorage::writeFloat(VALUE_KEY_SCALE, DEFAULT_SCALE);
+        NvsStorage::writeFloat(VALUE_KEY_OFFSET, DEFAULT_OFFSET);
     }
 
     char dummyName[NAME_LEN];

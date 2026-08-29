@@ -5,6 +5,8 @@
 
 constexpr const size_t UNIT_LEN = 16;
 constexpr const size_t NAME_LEN = 32;
+constexpr const float DEFAULT_SCALE = 1.0f;
+constexpr const float DEFAULT_OFFSET = 0.0f;
 constexpr const char VALUE_KEY_SCALE[] = "vScale";
 constexpr const char VALUE_KEY_OFFSET[] = "vOffset";
 constexpr const char VALUE_KEY_UNIT[] = "vUnit";
@@ -46,7 +48,6 @@ protected:
 private:
     uint8_t _id;
     const char *_type;
-    virtual bool isValid() = 0;
-    virtual void readRaw(float &buffer) = 0;
+    virtual bool readRaw(float &buffer) = 0;
     void ensureDefaults();
 };
