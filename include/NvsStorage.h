@@ -34,7 +34,6 @@ namespace NvsStorage
         ~Session();
         Session(const Session &) = delete;
         Session &operator=(const Session &) = delete;
-
     };
 
 }

@@ -1,22 +1,25 @@
 #pragma once
 
 #include "SensorBase.h"
-#include <DHT.h>
 
-class DHT22Temperature : public SensorBase
+constexpr const char CALIBRATE_KEY_DRY[] = "cDry";
+constexpr const char CALIBRATE_KEY_WET[] = "cWet";
+
+class SoilMoisture : public SensorBase
 {
 public:
-    DHT22Temperature(DHT *dht, uint8_t id);
-    ~DHT22Temperature()=default;
+    SoilMoisture(uint8_t pin, uint8_t id);
+    ~SoilMoisture()=default;
     bool getCalibrationJson(char *buffer, size_t len) override;
     bool getCalibrationValuesJson(char *buffer, size_t len) override;
     bool calibrate(JsonObjectConst data) override;
     void reset() override;
 
 private:
-    DHT *dht;
-    float lastValue = NAN;
-    const char *defaultUnit = "°C";
+    uint8_t pin;
+    float lastValue = 0;
+    bool lastValid = false;
+    const char *defaultUnit = "%";
     int defaultPrecision = 1;
 
     bool readRaw(float &buffer) override;
