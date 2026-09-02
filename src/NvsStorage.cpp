@@ -7,7 +7,7 @@ namespace
 {
     Preferences preferences;
     SemaphoreHandle_t nvsMutex = nullptr;
-    char currentNamespace[NvsStorage::KEY_NAME_MAX] = {};
+    char currentNamespace[NvsStorage::NVS_KEY_LEN] = {};
 
     bool begin(const char *pref_namespace, bool readOnly)
     {

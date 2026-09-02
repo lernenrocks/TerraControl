@@ -37,7 +37,7 @@ void setup()
   Serial.printf("Version: %s\n", APP_VERSION);
   Serial.printf("Freier Heap: %u Bytes\n", ESP.getFreeHeap());
   NvsStorage::init();
-  
+
   // FIXME old:
   Serial.println("\n--- Setup abgeschlossen ---");
   Serial.println("Bereit für WiFiManager Neuaufbau\n");
@@ -70,93 +70,12 @@ void setup()
   // DataHub::dataHubToSerial();
   //? Sensoren anmelden und Testen
 
-  SensorManager::initSensors();
-  Serial.println("Sensoren initialisiert");
-  // DHT00
-  DataHub::SensorData sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 0;
-  strncpy(sensor.name, "DHT000_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 0;
-  strncpy(sensor.name, "DHT000_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
-
-  // DHT01
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 1;
-  strncpy(sensor.name, "DHT001_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 1;
-  strncpy(sensor.name, "DHT001_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
-
-  // DHT02
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 2;
-  strncpy(sensor.name, "DHT002_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 2;
-  strncpy(sensor.name, "DHT002_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
-
-  // DHT03
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 3;
-  strncpy(sensor.name, "DHT003_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 3;
-  strncpy(sensor.name, "DHT003_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
-
-  // Soil Moisture Sensor
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 0;
-  strncpy(sensor.name, "Soil Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::SOIL_MOISTURE;
-  sensor.calMax = 1220.0f;
-  sensor.calMin = 3080.0f;
-  DataHub::registerSensor(sensor);
-
-  Serial.printf("Größe SensorData: %d", sizeof(DataHub::SensorData));
+  if (!SensorManager::init())
+  {
+    Serial.println("nicht alle Sensoren initialisiert, Logs prüfen");
+  }
+  else
+    Serial.println("Sensoren initialisiert");
   Serial.println("Setup beendet.");
 }
 
@@ -165,15 +84,12 @@ void loop()
   unsigned long now = millis();
   Controller::update(now);
 
-
-
-
-/*
-  static unsigned long lastStatus = 0;
-  if (now - lastStatus >= 30000)
-  {
-    lastStatus = now;
-    DataHub::dataHubStatusToSerial();
-  }
-    */
+  /*
+    static unsigned long lastStatus = 0;
+    if (now - lastStatus >= 30000)
+    {
+      lastStatus = now;
+      DataHub::dataHubStatusToSerial();
+    }
+      */
 }

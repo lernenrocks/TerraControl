@@ -20,10 +20,13 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
 ## Nicht verhandelbare Regeln
 
-### Kein Heap — niemals
-- **Verboten**: `String`, `new`, `malloc`, `DynamicJsonDocument`, `.c_str()` auf temporärem `String`
-- **Erlaubt**: `char[]` auf Stack, `StaticJsonDocument`, `snprintf`, `strlcpy`, `memcpy`
+### Heap — nur außerhalb heißer Pfade
+- **Verboten in wiederkehrenden Abläufen** (RequestWorker-Zyklus, Controller-Tick, jede periodisch laufende Schleife): `String`, `new`, `malloc`, `DynamicJsonDocument`, `.c_str()` auf temporärem `String`
+- **Erlaubt bei seltenen, User-getriggerten Aktionen** (Onboarding eines Sensors/Relays, Anlegen/Löschen einer Schaltregel): `new`/`delete` — kein wiederholtes Alloc/Free-Muster über die Laufzeit, da diese Aktionen selten und unregelmäßig auftreten, nicht in einer Schleife
+  - `new` immer auf Fehlschlag prüfen (`new(std::nothrow)` + Nullpointer-Check) — anders als ein statisches Array kann eine Heap-Allokation fehlschlagen
+- **Immer erlaubt**: `char[]` auf Stack, `StaticJsonDocument`, `snprintf`, `strlcpy`, `memcpy`
 - Ausnahme: einmaliger `WiFi.SSID()`-Aufruf beim Boot tolerierbar
+- Begründung: Fragmentierung entsteht durch wiederholte Alloc/Free-Zyklen unterschiedlicher Größe über Monate Laufzeit — seltene, unregelmäßige Allokationen (Onboarding, Schaltregeln) erzeugen dieses Muster nicht in relevantem Umfang; in jedem periodisch laufenden Codepfad bleibt Heap tabu (2026-08-31, siehe `learnings`-Diskussion zum SensorManager)
 
 ### Kein HTTPClient
 - Alle TCP-Kommunikation über `WiFiClient` direkt — Stack-Buffer, kein Heap-Risiko
@@ -82,6 +85,8 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
 ### RequestWorker (Namen vorläufig, Nachfolger von WiFiWorker)
 - Dedizierter FreeRTOS-Task, gestartet am Ende von `initWiFi()`; keine WiFi-Event-Handler
+- **`WIFI_DEVICE_MAX`**: eine gemeinsame Obergrenze für Relays + Remote-SensorNodes zusammen (nicht getrennt pro Typ), weil beide sich denselben SoftAP-`max_connection`-Topf teilen (ESP32: Default 4, bis 10 konfigurierbar) — `wifiDeviceCount` zählt beide zusammen, auch für die GUI-Anzeige ("X von 10 Geräten gebunden"). Gilt nicht für lokal verkabelte Sensoren (DHT22, SoilMoisture) — die sind keine AP-Clients
+- **STA-Reconnect-Backoff (30s)**: nach einem STA-Disconnect (z.B. Heimrouter weg) wartet der Worker 30s vor dem nächsten `esp_wifi_connect()`-Versuch, statt sofort zu reconnecten — verhindert, dass wiederholte Reconnect-Versuche den LWIP-Stack so auslasten, dass AP-seitige Verbindungen (Shellys, SensorNodes) darunter leiden (dokumentiertes ESP32-Problem, 2026-08-31 recherchiert)
 - **`syncApClients()`**: liest via `esp_wifi_ap_get_sta_list()` + `esp_netif_get_sta_list()` alle verbundenen AP-Clients; vergleicht MAC mit DataHub; aktualisiert IP wenn geändert; setzt `online = false` wenn MAC verschwunden — kein Queuing von `GET_STATUS`
 - **Periodischer AP-Sync**: `syncApClients()` läuft alle `relayStatusInterval_ms` im Worker-Zyklus — kein Event-Trigger
 - **`online`-Regeln**: `online = true` kommt ausschließlich vom JsonParser nach erfolgreichem GET_STATUS (HTTP 200); `online = false` bei GET_STATUS result == -1 (TCP-Fehler) oder wenn MAC in `syncApClients` nicht mehr sichtbar

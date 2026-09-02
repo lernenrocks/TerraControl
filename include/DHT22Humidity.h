@@ -10,8 +10,10 @@ public:
     ~DHT22Humidity()=default;
     bool getCalibrationJson(char *buffer, size_t len) override;
     bool getCalibrationValuesJson(char *buffer, size_t len) override;
-    bool calibrate(JsonObjectConst data) override;
+    bool calibrateSensorHardware(JsonObjectConst data) override;
     void reset() override;
+    const char *getDefaultUnit() const override;
+    int getDefaultPrecision() const override;
 
 private:
     DHT *dht;

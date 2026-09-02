@@ -10,7 +10,7 @@ namespace
 
 namespace NvsStorage
 {
-    constexpr size_t KEY_NAME_MAX = 16; // max size of key or namespace name
+    constexpr size_t NVS_KEY_LEN = 16; // max size of key or namespace name
 
     void init();
     void erase();

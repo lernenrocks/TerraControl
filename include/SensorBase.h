@@ -3,15 +3,17 @@
 #include <ArduinoJson.h>
 #include "NvsStorage.h"
 
-constexpr const size_t UNIT_LEN = 16;
-constexpr const size_t NAME_LEN = 32;
+constexpr const size_t SENSOR_UNIT_LEN = 16;
+constexpr const size_t SENSOR_NAME_LEN = 32;
 constexpr const float DEFAULT_SCALE = 1.0f;
 constexpr const float DEFAULT_OFFSET = 0.0f;
-constexpr const char VALUE_KEY_SCALE[] = "vScale";
-constexpr const char VALUE_KEY_OFFSET[] = "vOffset";
-constexpr const char VALUE_KEY_UNIT[] = "vUnit";
-constexpr const char VALUE_KEY_PRECISION[] = "vPrecision";
-constexpr const char SENSOR_NAME_KEY[] = "sensorName";
+constexpr const char CONFIG_KEY_SCALE[] = "configScale";
+constexpr const char CONFIG_KEY_OFFSET[] = "configOffset";
+constexpr const char CONFIG_KEY_UNIT[] = "configUnit";
+constexpr const char CONFIG_KEY_PRECISION[] = "configPrecision";
+constexpr const char CONFIG_KEY_NAME[] = "configName";
+constexpr const char CONFIG_KEY_TYPE[] = "configType";
+constexpr const char CONFIG_KEY_ID[] = "id";
 
 /** @brief Abstract base class for all sensors */
 class SensorBase
@@ -24,15 +26,12 @@ public:
 
     virtual bool getCalibrationJson(char *buffer, size_t len) = 0;
     virtual bool getCalibrationValuesJson(char *buffer, size_t len) = 0;
-    virtual bool calibrate(JsonObjectConst data) = 0;
+    virtual bool calibrateSensorHardware(JsonObjectConst data) = 0;
     virtual void reset() = 0;
-
-    const char *getType() const;
-    uint8_t getId() const;
-
-    void getName(char *buffer, size_t len);
+    virtual const char *getDefaultUnit() const = 0;
+    virtual int getDefaultPrecision() const = 0;
+    bool getName(char *buffer, size_t len);
     bool setName(const char *name, size_t len);
-
     bool getScale(float &scale) const;
     bool setScale(float scale);
     bool getOffset(float &offset) const;
@@ -40,10 +39,14 @@ public:
     bool getPrecision(int &precision) const;
     bool setPrecision(int precision);
     bool getUnit(char *buffer, size_t len) const;
-    bool setUnit(const char *unit);
+    bool setUnit(const char *unit, size_t len);
+
+    const char *getType() const;
+    uint8_t getId() const;
 
 protected:
     void nvsNamespace(char *buffer, size_t len) const;
+
 
 private:
     uint8_t _id;

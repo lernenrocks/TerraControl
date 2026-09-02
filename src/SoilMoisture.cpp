@@ -24,7 +24,7 @@ bool SoilMoisture::getCalibrationJson(char *buffer, size_t len)
 bool SoilMoisture::getCalibrationValuesJson(char *buffer, size_t len)
 {
     float calDry = 0.0f, calWet = 0.0f;
-    char ns[NvsStorage::KEY_NAME_MAX] = {};
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, true);
     if(NvsStorage::readFloat(CALIBRATE_KEY_DRY, calDry) && NvsStorage::readFloat(CALIBRATE_KEY_WET, calWet))
@@ -34,7 +34,7 @@ bool SoilMoisture::getCalibrationValuesJson(char *buffer, size_t len)
     }
     return false;
 }
-bool SoilMoisture::calibrate(JsonObjectConst data)
+bool SoilMoisture::calibrateSensorHardware(JsonObjectConst data)
 {
     if (data[CALIBRATE_KEY_DRY].isNull() || data[CALIBRATE_KEY_WET].isNull())
     {
@@ -42,7 +42,7 @@ bool SoilMoisture::calibrate(JsonObjectConst data)
     }
     float calDry = data[CALIBRATE_KEY_DRY];
     float calWet = data[CALIBRATE_KEY_WET];
-    char ns[NvsStorage::KEY_NAME_MAX] = {};
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
     NvsStorage::writeFloat(CALIBRATE_KEY_DRY, calDry);
@@ -56,6 +56,8 @@ void SoilMoisture::reset()
     setPrecision(defaultPrecision);
     setUnit(defaultUnit);
 }
+const char *SoilMoisture::getDefaultUnit() const { return defaultUnit; }
+int SoilMoisture::getDefaultPrecision() const { return defaultPrecision; }
 bool SoilMoisture::readRaw(float &buffer)
 {
     static unsigned long last = 0;
@@ -71,7 +73,7 @@ bool SoilMoisture::readRaw(float &buffer)
         else
         {
             float calDry = 0.0f, calWet = 0.0f;
-            char ns[NvsStorage::KEY_NAME_MAX] = {};
+            char ns[NvsStorage::NVS_KEY_LEN] = {};
             nvsNamespace(ns, sizeof(ns));
             NvsStorage::Session session(ns, true);
             bool calibrated = NvsStorage::readFloat(CALIBRATE_KEY_DRY, calDry) && NvsStorage::readFloat(CALIBRATE_KEY_WET, calWet);

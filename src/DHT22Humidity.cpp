@@ -24,7 +24,7 @@ bool DHT22Humidity::getCalibrationValuesJson(char *buffer, size_t len)
     size_t written = snprintf(buffer, len, "{}");
     return written < len;
 }
-bool DHT22Humidity::calibrate(JsonObjectConst data) { return true; }
+bool DHT22Humidity::calibrateSensorHardware(JsonObjectConst data) { return true; }
 void DHT22Humidity::reset()
 {
     setScale(DEFAULT_SCALE);
@@ -32,6 +32,8 @@ void DHT22Humidity::reset()
     setPrecision(defaultPrecision);
     setUnit(defaultUnit);
 }
+const char *DHT22Humidity::getDefaultUnit() const { return defaultUnit; }
+int DHT22Humidity::getDefaultPrecision() const { return defaultPrecision; }
 bool DHT22Humidity::readRaw(float &buffer)
 {
     static unsigned long last = 0;

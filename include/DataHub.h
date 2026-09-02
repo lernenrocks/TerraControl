@@ -3,18 +3,20 @@
 #include "SensorTypes.h"
 #include "RelayTypes.h"
 
+// FIXME Quickfix
+#include "SensorBase.h" 
 #define IP_LEN 16
 #define MAC_LEN 13
-#define NAME_LEN 32
+
 #define RELAY_SIZE 8
-#define UNIT_LEN 8
+
 #define SENSOR_DATA_SIZE 16
 
 namespace DataHub
 {
     struct SystemData
     {
-        char deviceName[NAME_LEN] = "TerraControl";
+        char deviceName[SENSOR_NAME_LEN] = "TerraControl";
         unsigned long relayStatusInterval_ms = 5000;
     };
 
@@ -34,7 +36,7 @@ namespace DataHub
         char ipV4Adress[IP_LEN] = {};
         char mac[MAC_LEN] = {};
         int rssi = 0; /**<@brief WiFi signal strength in dBm */
-        char name[NAME_LEN] = {};
+        char name[SENSOR_NAME_LEN] = {};
         bool inUse = false;           /**<@brief relay is registered and expected to be present */
         bool online = false;          /**<@brief relay is reachable; set to false when TCP fails */
         int id = 0;                   /**<@brief switch ID on the device; 0 for single socket, 0–3 for multi-socket */
@@ -54,12 +56,12 @@ namespace DataHub
     struct SensorData
     {
         SensorType type = SensorType::UNKNOWN; /** <@brief sensor type — determines which API the SensorManager calls */
-        char name[NAME_LEN] = {};              /** <@brief name or label */
+        char name[SENSOR_NAME_LEN] = {};              /** <@brief name or label */
         float value = 0.0f;                    /** <@brief measured value */
         float calMin = 0.0f;                   /** <@brief minimum calibration value for two point calibration (e.g. minimum soil humidity) */
         float calMax = 0.0f;                   /** <@brief maximum calibration value for two point calibration (e.g. maximum soil humidity) */
         float calOffset = 0.0f;                /** <@brief calibration valiue for offset (e.g. tara, or temperature) */
-        char unit[UNIT_LEN] = {};              /** <@brief unit of the measured value, e.g. °C or % */
+        char unit[SENSOR_UNIT_LEN] = {};              /** <@brief unit of the measured value, e.g. °C or % */
         bool inUse = false;                    /** <@brief sensor is registered and expected to be present */
         bool online = false;                   /** <@brief last reading was successful; sensor is reachable and responding */
         unsigned long lastUpdate = 0;          /** <@brief timestamp of the last successful update */

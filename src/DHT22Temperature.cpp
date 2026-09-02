@@ -24,7 +24,7 @@ bool DHT22Temperature::getCalibrationValuesJson(char *buffer, size_t len)
     size_t written = snprintf(buffer, len, "{}");
     return written < len;
 }
-bool DHT22Temperature::calibrate(JsonObjectConst data) { return true; }
+bool DHT22Temperature::calibrateSensorHardware(JsonObjectConst data) { return true; }
 void DHT22Temperature::reset()
 {
     setScale(DEFAULT_SCALE);
@@ -32,6 +32,8 @@ void DHT22Temperature::reset()
     setPrecision(defaultPrecision);
     setUnit(defaultUnit);
 }
+const char *DHT22Temperature::getDefaultUnit() const { return defaultUnit; }
+int DHT22Temperature::getDefaultPrecision() const { return defaultPrecision; }
 bool DHT22Temperature::readRaw(float &buffer)
 {
     static unsigned long last = 0;
