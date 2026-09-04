@@ -12,6 +12,7 @@
 #include "WiFiWorker.h"
 #include "DataHub.h"
 #include "SensorManager.h"
+#include "SoilMoisture.h"
 #include "SensorTypes.h" // @note remove if loading from JSON is implemented
 #include "Controller.h"
 #include "NvsStorage.h"
@@ -41,6 +42,7 @@ void setup()
   // FIXME old:
   Serial.println("\n--- Setup abgeschlossen ---");
   Serial.println("Bereit für WiFiManager Neuaufbau\n");
+  /*
   DataHub::initDataHub();
 
   DataHub::WifiRelay relay = {};
@@ -69,27 +71,39 @@ void setup()
   WiFiManager::updateWifiStatus();
   // DataHub::dataHubToSerial();
   //? Sensoren anmelden und Testen
-
+*/
   if (!SensorManager::init())
   {
     Serial.println("nicht alle Sensoren initialisiert, Logs prüfen");
   }
   else
     Serial.println("Sensoren initialisiert");
+
+  // Testaufruf: Kalibrierungs-JSON-Pfad für den Bodenfeuchtesensor durchspielen.
+  // idx=8 gilt nur für den heutigen Boot (alle 8 DHT-Allokationen erfolgreich, Soil Moisture als 9. Sensor) - kein stabiler Wert.
+  StaticJsonDocument<64> calDoc;
+  calDoc[CALIBRATE_KEY_DRY] = 3080.0f;
+  calDoc[CALIBRATE_KEY_WET] = 1220.0f;
+  if (SensorManager::calibrateSensorHardware(calDoc.as<JsonObjectConst>(), 8))
+    Serial.println("Soil Moisture kalibriert");
+  else
+    Serial.println("Soil Moisture Kalibrierung fehlgeschlagen");
+
+  Serial.println("--- Sensor-Konfiguration ---");
+  SensorManager::printSensorConfigsToSerial();
+
   Serial.println("Setup beendet.");
 }
 
 void loop()
 {
   unsigned long now = millis();
-  Controller::update(now);
+// Controller::update(now);
 
-  /*
-    static unsigned long lastStatus = 0;
-    if (now - lastStatus >= 30000)
-    {
-      lastStatus = now;
-      DataHub::dataHubStatusToSerial();
-    }
-      */
+  static unsigned long lastSensorPrint = 0;
+  if (now - lastSensorPrint >= 5000)
+  {
+    lastSensorPrint = now;
+    SensorManager::printSensorsToSerial();
+  }
 }

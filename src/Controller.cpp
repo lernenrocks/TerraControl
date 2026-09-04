@@ -98,7 +98,7 @@ namespace Controller
 
         monitorRelayStatus(now);
         enforceRelayState(now);
-        SensorManager::update(now);
+       // SensorManager::update(now);
         last = now;
     }
 }

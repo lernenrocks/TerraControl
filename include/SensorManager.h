@@ -1,4 +1,6 @@
 #pragma once
+#include <Arduino.h>
+#include <ArduinoJson.h>
 
 namespace SensorManager
 {
@@ -15,5 +17,7 @@ namespace SensorManager
     bool getSensorConfigJson(char *buffer, size_t len, uint8_t idx);
     bool calibrateSensorConfig(JsonObjectConst data, uint8_t idx);
     void resetSensor(uint8_t idx);
+    void printSensorsToSerial();
+    void printSensorConfigsToSerial();
 
 }

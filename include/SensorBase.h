@@ -7,13 +7,13 @@ constexpr const size_t SENSOR_UNIT_LEN = 16;
 constexpr const size_t SENSOR_NAME_LEN = 32;
 constexpr const float DEFAULT_SCALE = 1.0f;
 constexpr const float DEFAULT_OFFSET = 0.0f;
-constexpr const char CONFIG_KEY_SCALE[] = "configScale";
-constexpr const char CONFIG_KEY_OFFSET[] = "configOffset";
-constexpr const char CONFIG_KEY_UNIT[] = "configUnit";
-constexpr const char CONFIG_KEY_PRECISION[] = "configPrecision";
-constexpr const char CONFIG_KEY_NAME[] = "configName";
-constexpr const char CONFIG_KEY_TYPE[] = "configType";
-constexpr const char CONFIG_KEY_ID[] = "id";
+constexpr const char CONFIG_KEY_SCALE[] = "scale";
+constexpr const char CONFIG_KEY_OFFSET[] = "offset";
+constexpr const char CONFIG_KEY_UNIT[] = "unit";
+constexpr const char CONFIG_KEY_PRECISION[] = "precision";
+constexpr const char CONFIG_KEY_SENSOR_NAME[] = "name";
+constexpr const char CONFIG_KEY_SENSOR_TYPE[] = "type";
+constexpr const char CONFIG_KEY_SENSOR_ID[] = "id";
 
 /** @brief Abstract base class for all sensors */
 class SensorBase

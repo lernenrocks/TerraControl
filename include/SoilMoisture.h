@@ -19,6 +19,7 @@ public:
 
 private:
     uint8_t pin;
+    unsigned long lastReadTime = 0;
     float lastValue = 0;
     bool lastValid = false;
     const char *defaultUnit = "%";

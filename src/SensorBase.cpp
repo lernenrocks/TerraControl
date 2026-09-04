@@ -43,7 +43,7 @@ bool SensorBase::getName(char *buffer, size_t len)
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, true);
-    return NvsStorage::readString(CONFIG_KEY_NAME, buffer, len);
+    return NvsStorage::readString(CONFIG_KEY_SENSOR_NAME, buffer, len);
 }
 
 bool SensorBase::setName(const char *name, size_t len)
@@ -53,7 +53,7 @@ bool SensorBase::setName(const char *name, size_t len)
         char ns[NvsStorage::NVS_KEY_LEN] = {};
         nvsNamespace(ns, sizeof(ns));
         NvsStorage::Session session(ns, false);
-        return NvsStorage::writeString(CONFIG_KEY_NAME, name);
+        return NvsStorage::writeString(CONFIG_KEY_SENSOR_NAME, name);
     }
     return false;
 }
@@ -145,10 +145,10 @@ void SensorBase::ensureDefaults()
     }
 
     char dummyName[SENSOR_NAME_LEN];
-    if (!NvsStorage::readString(CONFIG_KEY_NAME, dummyName, sizeof(dummyName)))
+    if (!NvsStorage::readString(CONFIG_KEY_SENSOR_NAME, dummyName, sizeof(dummyName)))
     {
         char defaultName[SENSOR_NAME_LEN] = {};
         snprintf(defaultName, sizeof(defaultName), "Sensor %d", _id);
-        NvsStorage::writeString(CONFIG_KEY_NAME, defaultName);
+        NvsStorage::writeString(CONFIG_KEY_SENSOR_NAME, defaultName);
     }
 }

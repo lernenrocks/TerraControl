@@ -17,6 +17,7 @@ public:
 
 private:
     DHT *dht;
+    unsigned long lastReadTime = 0;
     float lastValue = NAN;
     const char *defaultUnit = "°C";
     int defaultPrecision = 1;

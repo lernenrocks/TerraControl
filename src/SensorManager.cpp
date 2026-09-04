@@ -127,20 +127,22 @@ namespace SensorManager
         if (!s->getOffset(offset))
             offset = DEFAULT_OFFSET;
 
-        size_t written = snprintf(buffer, len,
-                                  "{\"%s\":%d,\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":%f,\"%s\":%f,\"%s\":%d,\"%s\":\"%s\"}",
-                                  CONFIG_KEY_ID, idx,
-                                  CONFIG_KEY_TYPE, type,
-                                  CONFIG_KEY_NAME, name,
-                                  CONFIG_KEY_SCALE, scale,
-                                  CONFIG_KEY_OFFSET, offset,
-                                  CONFIG_KEY_PRECISION, precision,
-                                  CONFIG_KEY_UNIT, unit);
-        if (written >= len)
+        StaticJsonDocument<256> doc;
+        doc[CONFIG_KEY_SENSOR_ID] = idx;
+        doc[CONFIG_KEY_SENSOR_TYPE] = type;
+        doc[CONFIG_KEY_SENSOR_NAME] = name;
+        doc[CONFIG_KEY_SCALE] = scale;
+        doc[CONFIG_KEY_OFFSET] = offset;
+        doc[CONFIG_KEY_PRECISION] = precision;
+        doc[CONFIG_KEY_UNIT] = unit;
+
+        if (measureJson(doc) >= len)
         {
             Logger::log(Logger::ErrorLevel::ERROR, "Sensor config json buffer to small");
+            return false;
         }
-        return written < len;
+        serializeJson(doc, buffer, len);
+        return true;
     }
     bool calibrateSensorConfig(JsonObjectConst data, uint8_t idx)
     {
@@ -148,9 +150,9 @@ namespace SensorManager
         if (!s)
             return false;
         bool success = true;
-        if (!data[CONFIG_KEY_NAME].isNull())
+        if (!data[CONFIG_KEY_SENSOR_NAME].isNull())
         {
-            const char *newName = data[CONFIG_KEY_NAME];
+            const char *newName = data[CONFIG_KEY_SENSOR_NAME];
             if (!s->setName(newName, strlen(newName)))
             {
                 char msg[64] = {};
@@ -211,5 +213,40 @@ namespace SensorManager
         if (!s)
             return;
         s->reset();
+    }
+
+    void printSensorsToSerial()
+    {
+        for (SensorBase *s : sensors)
+        {
+            char name[SENSOR_NAME_LEN] = {};
+            if (!s->getName(name, sizeof(name)))
+                snprintf(name, sizeof(name), "sensor %d", s->getId());
+
+            float value;
+            if (s->read(value, false))
+            {
+                char unit[SENSOR_UNIT_LEN] = {};
+                if (!s->getUnit(unit, sizeof(unit)))
+                    strlcpy(unit, s->getDefaultUnit(), sizeof(unit));
+                Serial.printf("[%d] %s (%s): %.2f %s\n", s->getId(), name, s->getType(), value, unit);
+            }
+            else
+            {
+                Serial.printf("[%d] %s (%s): invalid\n", s->getId(), name, s->getType());
+            }
+        }
+    }
+
+    void printSensorConfigsToSerial()
+    {
+        for (SensorBase *s : sensors)
+        {
+            char buffer[256];
+            if (getSensorConfigJson(buffer, sizeof(buffer), s->getId()))
+            {
+                Serial.println(buffer);
+            }
+        }
     }
 }

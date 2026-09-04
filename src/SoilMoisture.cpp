@@ -15,11 +15,18 @@ SoilMoisture::SoilMoisture(uint8_t pin, uint8_t id) : SensorBase(id, "Soil Moist
 
 bool SoilMoisture::getCalibrationJson(char *buffer, size_t len)
 {
-    size_t written = snprintf(buffer, len,
-                              "[{\"instruction\":\"Keep sensor dry, then confirm\",\"key\":\"%s\"},"
-                              "{\"instruction\":\"Submerge sensor in water, then confirm\",\"key\":\"%s\"}]",
-                              CALIBRATE_KEY_DRY, CALIBRATE_KEY_WET);
-    return written < len;
+    StaticJsonDocument<256> doc;
+    JsonArray arr = doc.to<JsonArray>();
+    JsonObject dryStep = arr.createNestedObject();
+    dryStep["instruction"] = "Keep sensor dry, then confirm";
+    dryStep["key"] = CALIBRATE_KEY_DRY;
+    JsonObject wetStep = arr.createNestedObject();
+    wetStep["instruction"] = "Submerge sensor in water, then confirm";
+    wetStep["key"] = CALIBRATE_KEY_WET;
+    if (measureJson(doc) >= len)
+        return false;
+    serializeJson(doc, buffer, len);
+    return true;
 }
 bool SoilMoisture::getCalibrationValuesJson(char *buffer, size_t len)
 {
@@ -27,12 +34,16 @@ bool SoilMoisture::getCalibrationValuesJson(char *buffer, size_t len)
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, true);
-    if(NvsStorage::readFloat(CALIBRATE_KEY_DRY, calDry) && NvsStorage::readFloat(CALIBRATE_KEY_WET, calWet))
-    {
-    size_t written = snprintf(buffer, len, "{\"%s\":%f,\"%s\":%f}",CALIBRATE_KEY_DRY,calDry,CALIBRATE_KEY_WET,calWet);
+    if (!NvsStorage::readFloat(CALIBRATE_KEY_DRY, calDry) || !NvsStorage::readFloat(CALIBRATE_KEY_WET, calWet))
+        return false;
+
+    StaticJsonDocument<64> doc;
+    doc[CALIBRATE_KEY_DRY] = calDry;
+    doc[CALIBRATE_KEY_WET] = calWet;
+    if (measureJson(doc) >= len)
+        return false;
+    serializeJson(doc, buffer, len);
     return true;
-    }
-    return false;
 }
 bool SoilMoisture::calibrateSensorHardware(JsonObjectConst data)
 {
@@ -54,15 +65,14 @@ void SoilMoisture::reset()
     setScale(DEFAULT_SCALE);
     setOffset(DEFAULT_OFFSET);
     setPrecision(defaultPrecision);
-    setUnit(defaultUnit);
+    setUnit(defaultUnit, strlen(defaultUnit));
 }
 const char *SoilMoisture::getDefaultUnit() const { return defaultUnit; }
 int SoilMoisture::getDefaultPrecision() const { return defaultPrecision; }
 bool SoilMoisture::readRaw(float &buffer)
 {
-    static unsigned long last = 0;
     unsigned long now = millis();
-    if (now - last >= MINIMAL_READING_INTERVALL)
+    if (now - lastReadTime >= MINIMAL_READING_INTERVALL)
     {
         float raw = analogRead(pin);
         if (raw <= 0 || raw >= 4095)
@@ -88,7 +98,7 @@ bool SoilMoisture::readRaw(float &buffer)
                 lastValid = true;
             }
         }
-        last = now;
+        lastReadTime = now;
     }
     buffer = lastValue;
     return lastValid;
