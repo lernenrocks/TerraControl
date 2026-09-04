@@ -1,5 +1,11 @@
 # TerraControl
 
+> **🚧 Currently being redesigned.** Sensor and relay handling are being
+> reworked onto a shared class hierarchy (NVI pattern), and the project
+> went headless (no display, no SD card) in favor of a web GUI. This
+> README does not reflect the current architecture yet — it will be
+> updated once the redesign settles.
+
 *Smart terrarium control for those who don't want their setup 
 to stop working the day some company decides to shut down their 
 servers — and for those who need more than one or two plugs. 
@@ -20,6 +26,10 @@ that was definitely not the plan.*
 > once the prototype is running. If you happen to have a free and
 > freely usable image of a terrarium control setup — contributions
 > are very welcome.
+>
+> **Not current** — this image predates the headless decision and
+> the sensor/relay redesign; some details no longer match the actual
+> architecture.
 
 An ESP32 sits at the heart of the system as the **MainUnit**. It runs its own WiFi access point — Shelly smart plugs connect directly to the ESP32, not to your home router. This keeps all device communication local and independent of cloud services or internet connectivity.
 
@@ -33,17 +43,19 @@ The ESP32 also connects to your home router as a client, exclusively for time sy
 ## Roadmap
 
 - [x] Shelly Gen2/3 control — switch on/off, status monitoring, authenticated via SHA-256 Digest Auth
-- [x] DHT22 temperature and humidity sensors (4 local), capacitive soil moisture sensor (1 local)
 - [x] Soft-AP — ESP32 as primary access point; Shellys connect directly to ESP32, isolated from the home network
-- [x] WiFiWorker — dedicated background task handling all network communication with Shellys
+- [x] WiFiWorker — dedicated background task handling all network communication with Shellys (being split into RequestWorker + GuiWorker)
+- [x] `SensorBase` (NVI pattern) — DHT22 temperature/humidity (4 local) and capacitive soil moisture (1 local) rebuilt on a shared, NVS-backed sensor abstraction
+- [ ] `RelayBase` (NVI pattern) — Shelly relays on the same abstraction as sensors, with optional LED indicator / power metering capabilities
 - [ ] Remote sensors — ESP32-C3 nodes outside the terrarium, polled on demand
-- [ ] RTC (DS3231) — timekeeping with NTP synchronization
+- [ ] RTC (DS3231) + local SNTP server — timekeeping independent of the home router
 - [ ] Switching logic — connect a sensor value to a Shelly, with threshold and time-based rules
 - [ ] JSON config layer — serialization/deserialization for all settings
-- [ ] SD card — load and store configuration as JSON
+- [ ] NOR flash logging — external SPI flash for log storage (replaces the originally planned SD card)
 - [ ] NVS — persist last valid configuration across reboots
 - [ ] Onboarding wizard — zero-config binding of new Shellys and sensors from factory reset
-- [ ] Display *(optional — subject to flash budget; fallback: REST API monitoring + SD card config)*
+
+The project went headless — no display, no SD card slot, both removed from the hardware. The web GUI (proven out on a companion ESP32-C3 sensor-node project) turned out flexible enough to be the sole interface.
 
 
 ## Hardware
@@ -86,6 +98,8 @@ The wiring diagram and the hardware list may contain errors.
 ![TerraControl MainUnit v1](hardware/TerraControl_MainUnit_V1_bb.png)
 
 *[Download full diagram (PDF)](hardware/TerraControl_MainUnit_V1_bb.pdf)*
+
+> **Not current** — predates the headless decision (no display, no SD card).
 
 
 ## Getting Started

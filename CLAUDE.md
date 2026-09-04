@@ -20,10 +20,13 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
 ## Nicht verhandelbare Regeln
 
-### Kein Heap — niemals
-- **Verboten**: `String`, `new`, `malloc`, `DynamicJsonDocument`, `.c_str()` auf temporärem `String`
-- **Erlaubt**: `char[]` auf Stack, `StaticJsonDocument`, `snprintf`, `strlcpy`, `memcpy`
+### Heap — nur außerhalb heißer Pfade
+- **Verboten in wiederkehrenden Abläufen** (RequestWorker-Zyklus, Controller-Tick, jede periodisch laufende Schleife): `String`, `new`, `malloc`, `DynamicJsonDocument`, `.c_str()` auf temporärem `String`
+- **Erlaubt bei seltenen, User-getriggerten Aktionen** (Onboarding eines Sensors/Relays, Anlegen/Löschen einer Schaltregel): `new`/`delete` — kein wiederholtes Alloc/Free-Muster über die Laufzeit, da diese Aktionen selten und unregelmäßig auftreten, nicht in einer Schleife
+  - `new` immer auf Fehlschlag prüfen (`new(std::nothrow)` + Nullpointer-Check) — anders als ein statisches Array kann eine Heap-Allokation fehlschlagen
+- **Immer erlaubt**: `char[]` auf Stack, `StaticJsonDocument`, `snprintf`, `strlcpy`, `memcpy`
 - Ausnahme: einmaliger `WiFi.SSID()`-Aufruf beim Boot tolerierbar
+- Begründung: Fragmentierung entsteht durch wiederholte Alloc/Free-Zyklen unterschiedlicher Größe über Monate Laufzeit — seltene, unregelmäßige Allokationen (Onboarding, Schaltregeln) erzeugen dieses Muster nicht in relevantem Umfang; in jedem periodisch laufenden Codepfad bleibt Heap tabu (2026-08-31, siehe `learnings`-Diskussion zum SensorManager)
 
 ### Kein HTTPClient
 - Alle TCP-Kommunikation über `WiFiClient` direkt — Stack-Buffer, kein Heap-Risiko
@@ -33,6 +36,11 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - Komplexes JSON: `StaticJsonDocument` (ArduinoJson) — `DynamicJsonDocument` verboten
 - `extractValue()` in `DigestAuth.cpp` bleibt für HTTP-Header (`key="value"` und `key=value`)
 - Escape-Handling bei JSON zwingend: `\"`, `\\`, `\n`, `\r`, `\t`, `\uXXXX`
+
+### JSON-Erzeugung (Ausgabe)
+- `StaticJsonDocument` + `serializeJson()` ist der Standard für erzeugtes JSON, auch bei flachen/einfachen Objekten — nicht nur bei echter Verschachtelung
+- Grund für die Abkehr vom handgebauten `snprintf("{\"%s\":\"%s\"}", key, value)`-Muster: kein Escaping bei Interpolation von User-Eingaben (z.B. Sensor-/Relay-`name`) — ein Anführungszeichen im Namen bricht das erzeugte JSON oder ermöglicht JSON-Injection. `serializeJson()` escaped automatisch korrekt
+- Ursprünglich war das Flash-/RAM-Budget durch die (inzwischen verworfene) Display-Option ein Grund, `StaticJsonDocument` sparsam einzusetzen — mit der Headless-Entscheidung entfällt dieser Grund, `StaticJsonDocument` ist jetzt der Standardweg (2026-09-01)
 
 ### Serial-Präfixe
 - `[WARN]` — unerwarteter Zustand, Betrieb weiter möglich
@@ -47,12 +55,13 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - **`DigestAuth`**: SHA-256 Digest Auth — baut auf `HttpClient` auf; erster Request und WWW-Authenticate-Parsing selbst; zweiter Request über `HttpClient::get()` mit Authorization-Header; keine Shelly-Logik, keine MAC-Logik
 - **`NetworkUtils`**: Konvertierungen für MAC und IP — `normalizeMac`, `macBytesToChar`, `ipToChar`; kein HTTP-Bezug; löst `HttpUtils` ab
 - **`WiFiManager`**: alle TCP-Aufrufe gebündelt hier — nirgendwo sonst direktes TCP
-- **`WiFiWorker`**: dedizierter FreeRTOS-Task auf Core 0 — verwaltet Relay-Mailboxen, periodischen AP-Sync und STA-Queue; einzige Stelle die `WiFiManager`-Funktionen aufruft
-- **`Controller`**: Schaltlogik-Orchestrator — läuft im Haupt-Task; prüft Relay-Zustände, schreibt Switch-Befehle in WiFiWorker-Mailboxen; kennt keine Netzwerkdetails
+- **`RequestWorker`** (Namen vorläufig, Nachfolger von `WiFiWorker`): dedizierter FreeRTOS-Task auf Core 0 — verwaltet Relay-Mailboxen und Remote-Sensor-Mailboxen (gleiche Struktur wie Relay-Mailboxen), periodischen AP-Sync und STA-Queue; einzige Stelle die `WiFiManager`-Funktionen aufruft; reine Client-Rolle (pollt Shellys und Remote-Sensoren)
+- **`GuiWorker`** (Namen vorläufig, neu): dedizierter FreeRTOS-Task auf Core 0 — HTTP-Server für Konfiguration, Monitoring, manuelle Relay-Overrides, manuelle Zeiteinstellung (Standalone-Fallback ohne NTP) und Log-Download aus dem NOR-Flash; horcht auf AP- **und** STA-Interface gleichzeitig, damit die MainUnit auch ganz ohne Heimrouter bedienbar bleibt; eigene SHA-256 Digest Auth in Server-Rolle (Referenzimplementierung bereits im RemoteSensor-Projekt vorhanden, siehe `learnings/mainunit-transfer-notes.md`); reine Server-Rolle, kein Zugriff auf `WiFiManager`
+- **`Controller`**: Schaltlogik-Orchestrator — läuft im Haupt-Task; prüft Relay-Zustände, schreibt Switch-Befehle in RequestWorker-Mailboxen; kennt keine Netzwerkdetails
 - **`DataHub`**: einzige Datenschnittstelle — Getter/Setter, kein direkter Zugriff von außen
 - **`JsonParser`**: Eingangs-/Mapping-Layer, erzeugt DTOs (`RelayUpdate`) für DataHub
-- **`Watchdog`**: Laufzeitüberwachung, kein Eingriff in Schaltlogik — prüft inhaltliche Anomalien auf DataHub-Werten (z.B. Strom fließt obwohl `output == false`); zählt Parse-Fehler pro Relay und warnt ab Schwelle; Reaktionsstufen: `[WARN]` → Exception-Log (NVS/SD) → später Notification; kein automatischer Neustart
-- **`SensorManager`**: Sensor-Orchestrator — iteriert über alle registrierten `SensorEntry`s; lokale Sensoren (DHT22, SEN0308) direkt lesen und in DataHub schreiben; Remote-Sensoren per Request in WiFiWorker-Queue anstoßen; einzige Komponente die weiß wie ein Sensor angebunden ist
+- **`Watchdog`**: Laufzeitüberwachung, kein Eingriff in Schaltlogik — prüft inhaltliche Anomalien auf DataHub-Werten (z.B. Strom fließt obwohl `output == false`); zählt Parse-Fehler pro Relay und warnt ab Schwelle; Reaktionsstufen: `[WARN]` → Exception-Log (NVS/NOR-Flash) → später Notification; kein automatischer Neustart
+- **`SensorManager`**: Sensor-Orchestrator — iteriert über alle registrierten `SensorEntry`s; lokale Sensoren (DHT22, SEN0308) direkt lesen und in DataHub schreiben; Remote-Sensoren per Request in RequestWorker-Mailbox anstoßen; einzige Komponente die weiß wie ein Sensor angebunden ist
 
 ### DataHub-Regeln
 - Schreiben nur über API (`updateWifiStatus()`, `applyRelayUpdate()` etc.)
@@ -61,7 +70,7 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - Direkter Zugriff auf `dataHub.wifiRelay[]` ist verboten
 
 ### Schaltvorgang
-`WiFiManager::switchRelay()` → Worker queued `GET_STATUS` in Relay-Mailbox nach erfolgreichem Switch
+`WiFiManager::switchRelay()` → RequestWorker queued `GET_STATUS` in Relay-Mailbox nach erfolgreichem Switch
 
 ### Relay-Zykluslogik
 - **RelayMode** (Enum in `WifiRelay`): `AUTO` | `FORCED_ON` | `FORCED_OFF`
@@ -72,29 +81,41 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 - **Relay OFF**: `SWITCH_OFF` + inline `getStatus`; wenn bestätigt → nur noch periodisches `GET_STATUS`; wenn nicht bestätigt → 2 Wiederholungen (~3s Pause) → bei anhaltendem Mismatch zwischen DataHub-State und Relay-State: `relay.broken = true`
 
 ### FreeRTOS
-- WiFiWorker läuft als eigener Task auf Core 0 (Priorität 5, Stack 8192 Bytes)
+- **RequestWorker** und **GuiWorker** laufen beide auf **Core 0** — alle Netzwerk-Tasks gebündelt auf einem Core (Modultrennung nach Abhängigkeit: beide brauchen den WiFi-Stack), Core 1 bleibt exklusiv für Controller/SensorManager
 - Arduino loop() läuft auf Core 1 — Controller und SensorManager laufen dort
+- **Akzeptierter Tradeoff**: Die Schaltentscheidung läuft auf Core 1, ihre Ausführung (RequestWorker-Mailbox → TCP) auf Core 0 — durch die Mailbox-Architektur ohnehin entkoppelt, bewusst hingenommen statt einen gemeinsamen Core zu erzwingen
+- GuiWorker bekommt eine niedrigere Priorität als RequestWorker — ein langer Log-Download (bis zu 16 MB aus dem NOR-Flash) darf die Relay-Steuerung nicht verzögern; der FreeRTOS-Scheduler erzwingt den Vorrang automatisch
 - `delay()` in TCP-Schleifen → `taskYIELD()` (gibt CPU ab ohne feste Wartezeit)
 - `vTaskDelay(pdMS_TO_TICKS(50))` am Ende jedes Worker-Zyklus — gibt anderen Tasks CPU-Zeit
 
-### WiFiWorker
+### RequestWorker (Namen vorläufig, Nachfolger von WiFiWorker)
 - Dedizierter FreeRTOS-Task, gestartet am Ende von `initWiFi()`; keine WiFi-Event-Handler
+- **`WIFI_DEVICE_MAX`**: eine gemeinsame Obergrenze für Relays + Remote-SensorNodes zusammen (nicht getrennt pro Typ), weil beide sich denselben SoftAP-`max_connection`-Topf teilen (ESP32: Default 4, bis 10 konfigurierbar) — `wifiDeviceCount` zählt beide zusammen, auch für die GUI-Anzeige ("X von 10 Geräten gebunden"). Gilt nicht für lokal verkabelte Sensoren (DHT22, SoilMoisture) — die sind keine AP-Clients
+- **STA-Reconnect-Backoff (30s)**: nach einem STA-Disconnect (z.B. Heimrouter weg) wartet der Worker 30s vor dem nächsten `esp_wifi_connect()`-Versuch, statt sofort zu reconnecten — verhindert, dass wiederholte Reconnect-Versuche den LWIP-Stack so auslasten, dass AP-seitige Verbindungen (Shellys, SensorNodes) darunter leiden (dokumentiertes ESP32-Problem, 2026-08-31 recherchiert)
 - **`syncApClients()`**: liest via `esp_wifi_ap_get_sta_list()` + `esp_netif_get_sta_list()` alle verbundenen AP-Clients; vergleicht MAC mit DataHub; aktualisiert IP wenn geändert; setzt `online = false` wenn MAC verschwunden — kein Queuing von `GET_STATUS`
 - **Periodischer AP-Sync**: `syncApClients()` läuft alle `relayStatusInterval_ms` im Worker-Zyklus — kein Event-Trigger
 - **`online`-Regeln**: `online = true` kommt ausschließlich vom JsonParser nach erfolgreichem GET_STATUS (HTTP 200); `online = false` bei GET_STATUS result == -1 (TCP-Fehler) oder wenn MAC in `syncApClients` nicht mehr sichtbar
 - **`GET_STATUS_BACKOFF_MS = 5000`**: nach fehlgeschlagenem GET_STATUS (result ≠ 200) pausiert der Worker 5s vor dem nächsten Versuch für dieses Relay
 - **Mailbox pro Relay** (`QueueHandle_t`, Länge 1, `xQueueOverwrite`): Befehle `SWITCH_ON`, `SWITCH_OFF`, `GET_STATUS` — neuester Befehl überschreibt vorhandenen; SWITCH nur ausgeführt wenn `online = true`; GET_STATUS auch bei `online = false` (Reconnect-Erkennung)
+- **Mailbox pro Remote-Sensor** (gleiche Struktur wie Relay-Mailboxen, eigenes Postfach pro C3-Knoten) — ersetzt die frühere Idee, Remote-Sensoren über die STA-Queue abzuwickeln; C3-Knoten hängen am AP wie die Shellys, nicht am STA
 - **STA-Queue** (`QueueHandle_t`, Länge 8, `xQueueSend`): `NTP_SYNC`, `EXTERNAL_COMMAND` — für spätere Erweiterungen
-- **Remote-Sensor-Queue**: noch nicht implementiert — Platz reserviert in STA-Queue-Logik
-- Abarbeitungsreihenfolge: periodischer AP-Sync → Relay-Mailboxen → STA-Queue → `vTaskDelay(50ms)`
+- Abarbeitungsreihenfolge: periodischer AP-Sync → Relay-Mailboxen → Remote-Sensor-Mailboxen → STA-Queue → `vTaskDelay(50ms)`
 - Post-Switch-Verifikation: Worker queued `GET_STATUS` in Relay-Mailbox nach erfolgreichem `switchRelay()`
 - Alle Netzwerkoperationen laufen sequenziell im Worker — kein direktes TCP außerhalb
+
+### GuiWorker (Namen vorläufig, neu — ersetzt die frühere Display-Planung)
+- Dedizierter FreeRTOS-Task auf Core 0, eigener HTTP-Server; horcht auf AP- und STA-Interface gleichzeitig (`0.0.0.0`-Bindung) — Standalone-Betrieb ohne Heimrouter bleibt dadurch möglich, inklusive manueller Zeiteinstellung als NTP-Fallback
+- Zuständig für: Konfiguration (WLAN, Shelly/Sensor-Bindung, Schaltregeln), Monitoring (Sensorwerte, Relay-Zustände), manuelle Relay-Overrides, Log-Download aus dem NOR-Flash
+- Eigene SHA-256 Digest Auth in Server-Rolle — fertige Referenzimplementierung aus dem RemoteSensor-Projekt übertragbar (siehe `learnings/mainunit-transfer-notes.md`, Abschnitt A)
+- Konventionen aus dem RemoteSensor-Review direkt anwendbar, da hier zum ersten Mal ein eigener HTTP-Server auf der MainUnit entsteht: exaktes Routing (`strcmp` auf geparstem Pfad, kein `strstr`-Präfixmatch), ein benannter Handler pro Route, datengetriebenes Rendering im Frontend (siehe `learnings/stille-bugs.md` #03, `learnings/mainunit-transfer-notes.md` Abschnitt B)
+- Kein direkter Zugriff auf `WiFiManager` oder die Relay-Mailboxen — Overrides laufen über den DataHub, den der Controller ohnehin ausliest
 
 ### WiFi-Netzwerkarchitektur
 - ESP32 betreibt **Soft-AP und STA gleichzeitig** (AP+STA-Dual-Mode)
 - **Soft-AP** (`ESP32_TerraControl_<ID>`): alle gesteuerten Geräte (Shellys, C3-Remote-Sensoren) verbinden sich direkt mit dem ESP32 — isoliert vom Heimnetz
-- **STA**: Verbindung zum Heimrouter — ausschließlich für NTP-Sync, Logging, spätere externe Commands; bleibt dauerhaft offen
-- Kein mDNS: Gerät-Discovery über periodisches `syncApClients()`-Polling im WiFiWorker — liest MAC + IP aller verbundenen AP-Clients via `esp_netif_get_sta_list`; MAC ist persistenter Identifier, IP wird im DataHub aktuell gehalten; keine WiFi-Event-Handler
+- **STA**: Verbindung zum Heimrouter — für NTP-Sync, Logging, spätere externe Commands sowie GUI-Zugriff aus dem Heimnetz; bleibt dauerhaft offen
+- **GuiWorker horcht auf AP und STA gleichzeitig** — die Web-GUI ist die einzige Bedienoberfläche (kein Display), muss also auch ohne Heimrouter erreichbar sein (Standalone-Betrieb); Zeit wird in diesem Fall manuell über die GUI gesetzt statt per NTP
+- Kein mDNS: Gerät-Discovery über periodisches `syncApClients()`-Polling im RequestWorker — liest MAC + IP aller verbundenen AP-Clients via `esp_netif_get_sta_list`; MAC ist persistenter Identifier, IP wird im DataHub aktuell gehalten; keine WiFi-Event-Handler
 - Channel-Binding: Soft-AP und STA teilen einen Kanal (Hardware-Constraint) — Kanalwechsel des Routers führt zu kurzer Unterbrechung der AP-Clients (Reconnect in wenigen Sekunden); auf 2,4 GHz selten
 - Router-Ausfall unterbricht Kernfunktion nicht — Shellys und Sensoren bleiben über ESP32-AP erreichbar
 - **SSID ist der persistente Anker** für alle gebundenen Geräte (Shellys, C3-Sensoren) — SSID umbenennen trennt alle Verbindungen und erfordert vollständiges Re-Onboarding; Web-Interface muss das mit einer harten Warnung versehen
@@ -105,16 +126,13 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 
 ## Hardware (MainUnit v1)
 
+**Headless-Entscheidung (2026-08-26):** Kein Display, kein Touch, keine SD-Karte — Display und SD-Slot wurden physisch vom Gerät entfernt. Die im RemoteSensor-Projekt entstandene Web-GUI hat sich als flexibel genug erwiesen, um die alleinige Bedienoberfläche zu sein; spart zusätzlich das LVGL-Flash-Budget und die entsprechende Verkabelung. Begründung und Details: `learnings/mainunit-transfer-notes.md`.
+
 | Komponente | Interface | Pins |
 |---|---|---|
-| TFT Display 3,2" (ILI9341) | SPI | MOSI=23, SCLK=18, MISO=19, CS=5, DC=16, RST=17 |
-| Touch (XPT2046) | SPI | CS=4 |
-| SD-Karte | SPI | CS=32 |
 | DS3231 RTC | I²C | SDA=21, SCL=22 |
 | DHT22 #0–#3 | Single-Bus | GPIO 25, 26, 27, 33 |
-| Backlight PWM | — | GPIO 15 → S8050 (NPN, TO-92) |
-
-Display-Bibliothek: `TFT_eSPI` (aktuell) — Wechsel zu LVGL wenn Display als Konfigurationstool ausgebaut wird; Flash-Budget ist der entscheidende Faktor.
+| NOR-Flash (mehrere W25Q-Chips, je 128 Mbit / 16 MB) | SPI, eigene CS-Leitung pro Chip | MOSI/MISO/SCK geteilt |
 
 ---
 
@@ -164,29 +182,25 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 
 ### Implementierungsreihenfolge
 1. ✅ **DHT22** — lokal, synchron, kein Threading
-2. ✅ **WiFiWorker + Soft-AP** — ESP32 spannt eigenen AP auf; Shellys verbinden sich direkt; mDNS entfällt; WiFiWorker-Task mit Relay-Mailboxen + STA-Queue; Controller-Modul für Schaltlogik (in Arbeit)
-3. **Remote-Sensoren** — generische Sensorwerte von externen ESP32-C3-Geräten; zunächst hardcoded Credentials; C3 im Light Sleep, wake-on-TCP; Pull/On-Demand-Modell konsistent mit verkabelten Sensoren
-4. **RTC (DS3231)** — eigener Struct, getrennt von SensorData
+2. ✅ **WiFiWorker + Soft-AP** — ESP32 spannt eigenen AP auf; Shellys verbinden sich direkt; mDNS entfällt; WiFiWorker-Task mit Relay-Mailboxen + STA-Queue; Controller-Modul für Schaltlogik (in Arbeit; wird durch Schritt 3a in RequestWorker + GuiWorker aufgeteilt)
+3. **Remote-Sensoren** — generische Sensorwerte von externen ESP32-C3-Geräten; zunächst hardcoded Credentials; C3 im Light Sleep, wake-on-TCP; Pull/On-Demand-Modell konsistent mit verkabelten Sensoren; Polling läuft über eine eigene Mailbox pro Remote-Sensor im RequestWorker (gleiche Struktur wie Relay-Mailboxen, nicht die STA-Queue)
+3a. **RequestWorker / GuiWorker-Split** — WiFiWorker wird in zwei Tasks aufgeteilt: RequestWorker (Client-Rolle, Shelly- + Remote-Sensor-Polling) und GuiWorker (Server-Rolle, eigener HTTP-Server für die Web-GUI); beide auf Core 0, GuiWorker mit niedrigerer Priorität; siehe Abschnitte RequestWorker/GuiWorker und FreeRTOS oben
+3b. **RelayBase (NVI)** — Umbau von `WifiRelay` analog zu `SensorBase`; Basisklasse deckt reinen Schaltteil ab (an/aus, Fail-Safe-Timer via `toggle_after`-Äquivalent — Pflicht für unterstützte Relaistypen, funktioniert ohne NTP/RTC); `LedIndicator` und `PowerMetering` als optionale Mixins (Multiple Inheritance) für Hersteller mit dieser Fähigkeit; Minimalziel: die 3 vorhandenen Shellys über das neue Pattern steuern, vor dem Onboarding-Wizard (Schritt 8). `LedIndicator` mit Nachtmodus kommt erst nach RTC/lokalem SNTP-Server (Schritt 4), da Shelly dafür eine korrekte Uhrzeit braucht — `PowerMetering` und der Fail-Safe-Timer sind davon unabhängig
+4. **RTC (DS3231) + lokaler SNTP-Server** — eigener Struct, getrennt von SensorData; GUI bietet zusätzlich manuelle Zeiteinstellung als Fallback für Standalone-Betrieb ohne NTP; zusätzlich ein minimaler lokaler SNTP-Server auf der MainUnit nötig — Shellys hängen isoliert am Soft-AP ohne Internetzugang, ein öffentlicher NTP-Server ist für sie unerreichbar; Voraussetzung für `LedIndicator`s Nachtmodus (Schritt 3b)
 5. **Schaltlogik** — ein Messwert pro Schaltentscheidung; zunächst hardcoded in `setup()`
 6. **JSON Config Layer** — Serialisierung/Deserialisierung aller Settings; zunächst hardcoded, dann dateibasiert
-7. **SD-Karte** — liest und schreibt Config als JSON; primärer Config-Eingabeweg
-8. **Onboarding-Wizard** — Komfortfunktion für Endnutzer; automatisches Binden neuer Shellys und C3-Sensoren ab Werksreset; liest MAC aus Gerät, konfiguriert WiFi + Auth; setzt SD-Karte voraus (Config-Persistenz)
-9. **NVS** — speichert letzte valide Config über Reboot; Umfang abhängig davon ob Display implementiert wurde
-10. **Display** *(optional — Flash-Budget entscheidet nach Schritt 7)*
-    - On-Device-Konfigurationstool: WLAN-Credentials, MACs und Namen für Shellys/Sensoren, Schaltregeln, Schwellwerte
-    - Operator-Interface: Sensorwerte, Relay-Zustände, manuelle Relay-Overrides
-    - Benötigt: Mehrfenster-Navigation, Bildschirmtastatur → LVGL
-    - LVGL ~300KB Flash — nur auf ESP32-Varianten mit ausreichend Flash
-    - **Fallback bei 4MB-Variante**: kein Display — REST API + Companion-App übernehmen Konfiguration und Monitoring; bei Bedarf auf 8MB/16MB-Variante wechseln
-    - **Weitere Optionen**: SD-Slot-Modul ohne Display, oder externer NAND-Speicher am ESP32
+7. **NOR-Flash Logging** — externer SPI-NOR (W25Q-Familie, mehrere Chips à 128 Mbit/16 MB mit eigener Chip-Select-Leitung statt einem großen adressierten Chip); monatliche Rotation, FIFO-Retention (ältester Monat weicht bei Platzmangel), GUI-Download + manuelles Löschen für gezieltes Archivieren; ersetzt die ursprünglich geplante SD-Karte vollständig (Begründung: `learnings/mainunit-transfer-notes.md`)
+8. **Onboarding-Wizard** — Komfortfunktion für Endnutzer; automatisches Binden neuer Shellys und C3-Sensoren ab Werksreset; liest MAC aus Gerät, konfiguriert WiFi + Auth; setzt den NVS-Konfigurationsspeicher voraus (Config-Persistenz)
+9. **NVS** — speichert letzte valide Config über Reboot
+10. **GUI-Ausbau** — Konfiguration (WLAN-Credentials, MACs und Namen für Shellys/Sensoren, Schaltregeln, Schwellwerte) und Operator-Interface (Sensorwerte, Relay-Zustände, manuelle Relay-Overrides) über den GuiWorker; ersetzt die ursprünglich geplante Display/LVGL-Lösung vollständig (kein Display mehr verbaut, siehe Hardware-Abschnitt)
 11. **Eigenverbrauch** — INA219 (I2C) misst Spannung, Strom und Leistung von MainUnit und C3-Nodes; Werte landen im DataHub und sind über REST API abrufbar; Voraussetzung für glaubwürdige Stromverbrauchs-Transparenz gegenüber Endnutzern
 12. **Flash Encryption** — NVS-Verschlüsselung als erster Schritt (AES-256, Schlüssel in eFuse, Hardware-Beschleuniger); für Marktreife: Secure Boot + vollständige Flash-Verschlüsselung; verhindert Credential-Extraktion bei gestohlenen Geräten
 
 ### Sensor-Architektur
 - `SensorEntry` ist generisch — ein Eintrag, ein Messwert (`float`), egal ob DHT22, Wägezelle oder Lichtsensor
 - `lastUpdate = 0` als Default ist bewusst — der erste Read erfolgt erst nach dem ersten abgelaufenen Intervall; gibt lokalen Sensoren Aufwärmzeit und Remote-Sensoren Zeit für WiFi-Verbindungsaufbau nach Stromausfall
-- Registrierung analog zu Shellys: API-Funktion, zunächst in `setup()` aufgerufen, später von SD/GUI
-- Lokale Sensoren schreiben direkt in DataHub; Remote-Sensoren legen Request in WiFiWorker-Queue
+- Registrierung analog zu Shellys: API-Funktion, zunächst in `setup()` aufgerufen, später über die GUI
+- Lokale Sensoren schreiben direkt in DataHub; Remote-Sensoren legen Request in ihrer RequestWorker-Mailbox ab
 - `valid` und `lastUpdate` in `SensorEntry` sind load-bearing — Schaltlogik muss Staleness prüfen
 
 
@@ -196,10 +210,13 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 - **Shelly-Auth**: ein Account (`terracontrol`) mit generiertem Passwort, das nie angezeigt wird — MainUnit ist einziger Zugangspunkt
 - User hat keinen direkten Zugriff auf die Shelly — alle Konfiguration (inkl. LED) läuft ausschließlich über TerraControl
 - Shelly aus dem Verbund nehmen: Factory Reset am Gerät; TerraControl erkennt die MAC nicht mehr und entfernt den Eintrag
-- **Shelly-Härtung** (automatisch beim Onboarding): Cloud, BLE und MQTT werden deaktiviert (`Cloud.SetConfig`, `BLE.SetConfig`, `Mqtt.SetConfig`)
-- **LED-Konfiguration**: Farbe + Helligkeit für AN/AUS-Zustand, Nachtmodus (Zeitfenster + Helligkeit); Locate-Funktion (temporärer Blink per RPC zur physischen Identifikation)
+- **Shelly-Härtung** (automatisch beim Onboarding): Zugriffs-/Kontrollkanäle neben TerraControl werden deaktiviert — Cloud, BLE und MQTT (`Cloud.SetConfig`, `BLE.SetConfig`, `Mqtt.SetConfig`), zusätzlich Script (alle Script-Instanzen gelöscht/deaktiviert — ein Script auf der Shelly könnte sonst autonom schalten), Matter (kein Fremdzugriff über Apple/Google-Hub) und BTHome (kein BLE-Broadcast an Dritte); dazu geräteseitige `Switch.SetConfig`-Timer (`auto_on`/`auto_off`) explizit auf `false` setzen — kein Fremdzugriffsrisiko, aber Konfliktpotential mit der eigenen Mailbox-Schaltlogik, falls ein Vorbesitzer/Techniker die mal gesetzt hatte. `Ws` (Outbound Websocket) braucht eine explizite Ziel-URL, um etwas zu tun — reicht, die nie zu setzen, statt aktiv abzuschalten. Zusätzlich `Switch.SetConfig` → `initial_state` explizit auf `"off"` setzen, nie `"restore_last"` — nach einem Stromausfall soll nie automatisch wieder Licht/Wärme anlaufen, auch nicht kurzzeitig; das ist unabhängig vom `RelayMode` (`AUTO`/`FORCED_ON`/`FORCED_OFF`), der eine bewusste User-Übersteuerung der Schaltlogik beschreibt, kein Boot-Sicherheitsmechanismus (2026-09-01 recherchiert)
+- **LED-Konfiguration**: Farbe + Helligkeit für AN/AUS-Zustand; zeitgesteuerter Nachtmodus (Zeitfenster + reduzierte Helligkeit) läuft über Shellys eigenen internen Timer, nicht aktiv von TerraControl gesteuert — nur beim Onboarding einmal konfiguriert. Voraussetzung: Shelly braucht eine korrekte Uhrzeit dafür, siehe SNTP-Punkt unten. Locate-Funktion (temporärer Blink per RPC zur physischen Identifikation)
+- **Shelly braucht eigene Zeitquelle für den Nachtmodus** — Zeit kommt per SNTP (`Sys.SetConfig`, `sntp.server`), der Server kann auf eine reine IP gesetzt werden. Shellys hängen isoliert am Soft-AP ohne Internetzugang, ein öffentlicher NTP-Server ist für sie unerreichbar — die MainUnit muss deshalb selbst einen minimalen lokalen SNTP-Server anbieten und jede Shelly beim Onboarding auf die eigene AP-IP zeigen lassen, sonst bleibt die Uhr falsch/undefiniert und der Nachtmodus schaltet zur falschen Zeit. Noch nicht in der Roadmap erfasst, wird vor der LED-Anbindung nötig (2026-09-01 recherchiert)
 - **RPC-Proxy** für erweiterte Shelly-Features: `shellyRPC(mac, method, params, response, len)` — TerraControl übernimmt Auth und Routing, Caller liefert Methode und Parameter als Strings
-- **JSON an die Shelly ist modellunabhängig** — gleicher RPC für Plug S und Mehrfachdosen; Unterschied nur in der Anzahl der WifiRelay-Slots (ein Slot pro Switch-Komponente, gleiche MAC, unterschiedliche `id`)
+- **JSON an die Shelly ist modellunabhängig** — gleicher RPC für Plug S und Mehrfachdosen; Unterschied nur in der Anzahl der WifiRelay-Slots (ein Slot pro Switch-Komponente, gleiche MAC, unterschiedliche `id`); bestätigt durch die Shelly-API-Doku — `Switch.Set`/`Switch.GetStatus`/`Switch.SetConfig` sind bei Plug S Gen3 und Power Strip Gen4 identische Aufrufe, nur die Zahl gültiger `id`-Werte unterscheidet sich (1 vs. 4). Für den reinen Schaltteil reicht daher voraussichtlich eine gemeinsame Klasse für beide Produkte
+- **RelayBase/LED/Leistungsmessung-Trennung**: LED-Steuerung und Leistungsmessung sind keine abgeschwächten Relais-Eigenschaften (anders als "keine Kalibrierung nötig" bei Sensoren), sondern orthogonale Hardware-Fähigkeiten, die nur zufällig bei manchen Geräten mitverbaut sind — deshalb kein Virtual mit No-op-Default auf `RelayBase`, sondern eigene Schnittstellen (Multiple Inheritance, z.B. `class ShellyPlugSGen3 : public RelayBase, public LedIndicator, public PowerMetering`); Zugriff über `dynamic_cast<LedIndicator*>`/`dynamic_cast<PowerMetering*>`, `nullptr` heißt "hat diese Fähigkeit nicht". Zusätzlich verschieden benannte RPC-Namespaces je Produkt für LED (`PLUGS_UI` bei Plug S Gen3, `POWERSTRIP_UI` beim Power Strip Gen4) — jede konkrete `LedIndicator`-Implementierung kapselt ihren eigenen Namespace; Leistungsdaten kommen bei Shelly direkt in der `Switch.GetStatus`-Antwort mit, kein separater Request nötig. RelayBase selbst wird zuerst gebaut, LED-/Leistungs-Anbindung kommt danach (2026-09-01)
+- **Fail-Safe-Pflicht für Relaistypen**: RelayBase bleibt architektonisch offen für andere Hersteller, aber TerraControl unterstützt nur Relaistypen mit netzwerkunabhängigem Auto-Aus (bei Shelly: `toggle_after` auf `Switch.Set`) — schützt vor dem Fall, dass die MainUnit selbst komplett ausfällt/unerreichbar wird, was die eigene Mailbox-Wiederholung im RequestWorker nicht abdecken kann. Kein Hersteller ohne diese Garantie wird tatsächlich onboardbar gemacht, auch wenn die Klasse technisch baubar wäre (2026-09-01)
 - C3-Onboarding: analoger Ablauf über C3-eigenen Provisioning-AP; übergibt AP-Credentials und Sensor-Konfiguration (Typ, ID, Intervall)
 
 ### Remote-Sensor-Protokoll
@@ -222,7 +239,7 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 
 ### Config-Persistenz
 - **NVS ist der primäre Config-Store** — einzige Wahrheitsquelle für alle Settings
-- **SD-Karte**: ausschließlich Logging — keine Config-Datenhaltung, keine Synchronisation
+- **NOR-Flash**: ausschließlich Logging — keine Config-Datenhaltung, keine Synchronisation (ersetzt die ursprünglich geplante SD-Karte, siehe Hardware-Abschnitt)
 - **Config-Update**: JSON POST via WiFi-Endpoint → DataHub → NVS; kein physischer Zugriff nötig
 - **Config-Export**: JSON GET via WiFi-Endpoint — Download als Backup; Wiederherstellung per POST
 - **Initialer Bootstrap**: `initDefaults()` beim ersten Boot wenn NVS leer — schreibt hardcodete Startwerte
@@ -247,7 +264,7 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 ### OTA
 - **Companion-App triggert OTA** — REST-Endpoint auf MainUnit; MainUnit lädt Firmware vom NAS (via STA), aktualisiert sich selbst und serviert C3-Firmware lokal über den AP; C3-Nodes pullen und updaten sich selbst
 - ESP32-Standard-Partition-Scheme ist OTA-fähig (zwei App-Slots) — gilt für MainUnit und C3; kein physisches Reflashen nötig für zukünftige Updates
-- Voraussetzung: REST-API-Layer und SD-Karte (Firmware-Storage) müssen stehen
+- Voraussetzung: REST-API-Layer (GuiWorker) und NOR-Flash (Firmware-Storage) müssen stehen
 
 ### Datenbank
 - InfluxDB für Zeitreihendaten, CouchDB/SQLite+REST für Konfiguration
@@ -275,6 +292,8 @@ Zu testende Funktionen:
 
 **Mocking**: `WiFiClient` als `FakeStream` (ist ein `Stream`)  
 **Nicht mockbar**: FreeRTOS-Mutex, WiFi-Connect, AP-Client-Events
+
+**GUI-Tests ohne Hardware**: Headless Firefox + gemockter `fetch()` — bewährter Ansatz aus dem RemoteSensor-Projekt (Syntax-Check, Funktionsscreenshots, Interferenz-Bugs reproduzierbar); relevant sobald der GuiWorker eine eigene Web-GUI bekommt. Details: `learnings/mainunit-transfer-notes.md`, Abschnitt C.
 
 **Integrationstests** (manuell, vor jedem Merge auf `main`):
 - Alle 3 Shellys verbinden sich mit ESP32-AP und werden als `online` markiert

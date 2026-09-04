@@ -12,8 +12,10 @@
 #include "WiFiWorker.h"
 #include "DataHub.h"
 #include "SensorManager.h"
+#include "SoilMoisture.h"
 #include "SensorTypes.h" // @note remove if loading from JSON is implemented
 #include "Controller.h"
+#include "NvsStorage.h"
 
 #define APP_VERSION "0.1"
 
@@ -35,9 +37,12 @@ void setup()
   // Serial.printf("\n=== BOOT START === (#%u, reset=%d)\n", bootCount, (int)rr);
   Serial.printf("Version: %s\n", APP_VERSION);
   Serial.printf("Freier Heap: %u Bytes\n", ESP.getFreeHeap());
+  NvsStorage::init();
 
+  // FIXME old:
   Serial.println("\n--- Setup abgeschlossen ---");
   Serial.println("Bereit für WiFiManager Neuaufbau\n");
+  /*
   DataHub::initDataHub();
 
   DataHub::WifiRelay relay = {};
@@ -66,111 +71,39 @@ void setup()
   WiFiManager::updateWifiStatus();
   // DataHub::dataHubToSerial();
   //? Sensoren anmelden und Testen
+*/
+  if (!SensorManager::init())
+  {
+    Serial.println("nicht alle Sensoren initialisiert, Logs prüfen");
+  }
+  else
+    Serial.println("Sensoren initialisiert");
 
-  SensorManager::initSensors();
-  Serial.println("Sensoren initialisiert");
-  // DHT00
-  DataHub::SensorData sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 0;
-  strncpy(sensor.name, "DHT000_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 0;
-  strncpy(sensor.name, "DHT000_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
+  // Testaufruf: Kalibrierungs-JSON-Pfad für den Bodenfeuchtesensor durchspielen.
+  // idx=8 gilt nur für den heutigen Boot (alle 8 DHT-Allokationen erfolgreich, Soil Moisture als 9. Sensor) - kein stabiler Wert.
+  StaticJsonDocument<64> calDoc;
+  calDoc[CALIBRATE_KEY_DRY] = 3080.0f;
+  calDoc[CALIBRATE_KEY_WET] = 1220.0f;
+  if (SensorManager::calibrateSensorHardware(calDoc.as<JsonObjectConst>(), 8))
+    Serial.println("Soil Moisture kalibriert");
+  else
+    Serial.println("Soil Moisture Kalibrierung fehlgeschlagen");
 
-  // DHT01
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 1;
-  strncpy(sensor.name, "DHT001_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 1;
-  strncpy(sensor.name, "DHT001_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
+  Serial.println("--- Sensor-Konfiguration ---");
+  SensorManager::printSensorConfigsToSerial();
 
-  // DHT02
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 2;
-  strncpy(sensor.name, "DHT002_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 2;
-  strncpy(sensor.name, "DHT002_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
-
-  // DHT03
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 3;
-  strncpy(sensor.name, "DHT003_Temp", NAME_LEN);
-  strncpy(sensor.unit, "°C", UNIT_LEN);
-  sensor.type = SensorType::DHT22_TEMPERATURE;
-  DataHub::registerSensor(sensor);
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 3;
-  strncpy(sensor.name, "DHT003_Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::DHT22_HUMIDITY;
-  DataHub::registerSensor(sensor);
-
-  // Soil Moisture Sensor
-  sensor = {};
-  sensor.inUse = true;
-  sensor.updateInterval = 2000;
-  sensor.sensorIndex = 0;
-  strncpy(sensor.name, "Soil Hum", NAME_LEN);
-  strncpy(sensor.unit, "%", UNIT_LEN);
-  sensor.type = SensorType::SOIL_MOISTURE;
-  sensor.calMax = 1220.0f;
-  sensor.calMin = 3080.0f;
-  DataHub::registerSensor(sensor);
-
-  Serial.printf("Größe SensorData: %d", sizeof(DataHub::SensorData));
   Serial.println("Setup beendet.");
 }
 
 void loop()
 {
   unsigned long now = millis();
-  Controller::update(now);
+// Controller::update(now);
 
-
-
-
-/*
-  static unsigned long lastStatus = 0;
-  if (now - lastStatus >= 30000)
+  static unsigned long lastSensorPrint = 0;
+  if (now - lastSensorPrint >= 5000)
   {
-    lastStatus = now;
-    DataHub::dataHubStatusToSerial();
+    lastSensorPrint = now;
+    SensorManager::printSensorsToSerial();
   }
-    */
 }
