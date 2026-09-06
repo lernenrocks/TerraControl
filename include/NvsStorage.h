@@ -15,6 +15,8 @@ namespace NvsStorage
     void init();
     void erase();
 
+    bool clearNamespace();
+
     bool writeBool(const char *key, const bool value);
     bool writeLong(const char *key, const long value);
     bool writeString(const char *key, const char *value);

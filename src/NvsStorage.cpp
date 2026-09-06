@@ -57,6 +57,15 @@ namespace NvsStorage
         nvs_flash_erase();
         nvs_flash_init();
     }
+    bool clearNamespace(){
+        bool success = preferences.clear();
+        if(!success){
+        char msg[64] = {};
+        snprintf(msg, sizeof(msg), "could not delete namspace: %s",currentNamespace);
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
+        }
+        return success;
+    }
     bool writeBool(const char *key, const bool value)
     {
         bool success = preferences.putBool(key, value) > 0; // returns bytes written
