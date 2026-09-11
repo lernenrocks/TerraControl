@@ -22,6 +22,14 @@ namespace NetworkUtils
     void macBytesToChar(char *out, const uint8_t byteMac[6], size_t len);
 
     /**
+     * @brief converts a mac address given as char array to bytes
+     * @param byteMac buffer for mac as bytes (6 bytes)
+     * @param mac mac as null-terminated hex string without separators (e.g. "8cbfeaa03350")
+     * @return true if all 6 bytes were parsed successfully, false on malformed input
+    */
+    bool macCharToBytes(uint8_t byteMac[6], const char *mac);
+
+    /**
      * @brief converts an ip address given as uint32_t to char array
      * @param out buffer for ip as char
      * @param ip id address to convert

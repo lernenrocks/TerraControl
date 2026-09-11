@@ -242,6 +242,7 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 - **NOR-Flash**: ausschließlich Logging — keine Config-Datenhaltung, keine Synchronisation (ersetzt die ursprünglich geplante SD-Karte, siehe Hardware-Abschnitt)
 - **Config-Update**: JSON POST via WiFi-Endpoint → DataHub → NVS; kein physischer Zugriff nötig
 - **Config-Export**: JSON GET via WiFi-Endpoint — Download als Backup; Wiederherstellung per POST
+- **NVS-Vollsicherung auf NOR-Flash** (Idee, noch nicht terminiert, 2026-09-09): zusätzlich zum JSON-Export ein roher Komplett-Snapshot der NVS-Partition (`esp_partition_read()`/`write()`) als eigener NOR-Log-Eintrag — Rollback-Möglichkeit bei NVS-Korruption, ohne vollständiges Re-Onboarding. Beide Richtungen (Sichern **und** Wiederherstellen) ausschließlich manuell vom User ausgelöst, nie automatisch/geplant — sonst Risiko, frischere legitime Änderungen versehentlich mit einer älteren Sicherung zu überschreiben. Muss auf dem NOR verschlüsselt abgelegt werden, sobald Flash Encryption (Schritt 12) steht, sonst wäre die NVS-Verschlüsselung durch eine unverschlüsselte Kopie im NOR wirkungslos
 - **Initialer Bootstrap**: `initDefaults()` beim ersten Boot wenn NVS leer — schreibt hardcodete Startwerte
 - NVS-Scope wächst mit den Features (WiFi-Credentials, Relay-Config, Sensor-Config, AP-Subnetz ...)
 

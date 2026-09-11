@@ -1,5 +1,6 @@
 #pragma once
 #include "DataHub.h"
+#include <Arduino.h>
 // WiFiManager - Neuaufbau
 // Minimale Struktur für ESP32 ohne angeschlossene Hardware
 

@@ -66,6 +66,10 @@ namespace NvsStorage
         }
         return success;
     }
+    bool hasKey(const char *key)
+    {
+        return preferences.isKey(key);
+    }
     bool writeBool(const char *key, const bool value)
     {
         bool success = preferences.putBool(key, value) > 0; // returns bytes written
@@ -97,6 +101,13 @@ namespace NvsStorage
     bool writeInt(const char *key, const int value)
     {
         bool success = preferences.putInt(key, value) > 0;
+        if (!success)
+            logWriteFailure(key);
+        return success;
+    }
+    bool writeBytes(const char *key, const void *value, size_t len)
+    {
+        bool success = preferences.putBytes(key, value, len) > 0;
         if (!success)
             logWriteFailure(key);
         return success;
@@ -147,6 +158,19 @@ namespace NvsStorage
             return false;
         }
         value = preferences.getInt(key);
+        return true;
+    }
+    bool readBytes(const char *key, void *value, size_t len)
+    {
+        if (!preferences.isKey(key))
+        {
+            return false;
+        }
+        if (preferences.getBytesLength(key) > len)
+        {
+            return false; // stored data wouldn't fit - avoid a buffer overrun
+        }
+        preferences.getBytes(key, value, len);
         return true;
     }
 

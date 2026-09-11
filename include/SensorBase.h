@@ -19,7 +19,7 @@ constexpr const char CONFIG_KEY_SENSOR_ID[] = "id";
 class SensorBase
 {
 public:
-    SensorBase(uint8_t id, const char *type);
+    SensorBase(uint8_t id, const char *type, int defaultPrecision, const char *defaultUnit);
     virtual ~SensorBase() = default;
 
     bool read(float &value, bool raw);
@@ -30,16 +30,16 @@ public:
     virtual void reset() = 0;
     virtual const char *getDefaultUnit() const = 0;
     virtual int getDefaultPrecision() const = 0;
-    bool getName(char *buffer, size_t len);
-    bool setName(const char *name, size_t len);
-    bool getScale(float &scale) const;
+    const char *getName() const;
+    bool setName(const char *name);
+    float getScale() const;
     bool setScale(float scale);
-    bool getOffset(float &offset) const;
+    float getOffset() const;
     bool setOffset(float offset);
-    bool getPrecision(int &precision) const;
+    int getPrecision() const;
     bool setPrecision(int precision);
-    bool getUnit(char *buffer, size_t len) const;
-    bool setUnit(const char *unit, size_t len);
+    const char *getUnit() const;
+    bool setUnit(const char *unit);
 
     const char *getType() const;
     uint8_t getId() const;
@@ -47,10 +47,14 @@ public:
 protected:
     void nvsNamespace(char *buffer, size_t len) const;
 
-
 private:
     uint8_t _id;
     const char *_type;
+    char _name[SENSOR_NAME_LEN] = {};
+    float _scale = DEFAULT_SCALE;
+    float _offset = DEFAULT_OFFSET;
+    int _precision = 0;
+    char _unit[SENSOR_UNIT_LEN] = {};
     virtual bool readRaw(float &buffer) = 0;
-    void ensureDefaults();
+    void ensureDefaults(int defaultPrecision, const char *defaultUnit);
 };

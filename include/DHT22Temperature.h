@@ -19,8 +19,8 @@ private:
     DHT *dht;
     unsigned long lastReadTime = 0;
     float lastValue = NAN;
-    const char *defaultUnit = "°C";
-    int defaultPrecision = 1;
+    static constexpr const char *defaultUnit = "°C";
+    static constexpr int defaultPrecision = 1;
 
     bool readRaw(float &buffer) override;
 };

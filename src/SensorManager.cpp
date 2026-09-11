@@ -111,21 +111,11 @@ namespace SensorManager
         if (!s)
             return false;
         const char *type = s->getType();
-        char name[SENSOR_NAME_LEN] = {};
-        if (!s->getName(name, sizeof(name)))
-            snprintf(name, sizeof(name), "sensor %d", idx);
-        char unit[SENSOR_UNIT_LEN] = {};
-        if (!s->getUnit(unit, sizeof(unit)))
-            strlcpy(unit, s->getDefaultUnit(), sizeof(unit));
-        int precision;
-        if (!s->getPrecision(precision))
-            precision = s->getDefaultPrecision();
-        float scale;
-        if (!s->getScale(scale))
-            scale = DEFAULT_SCALE;
-        float offset;
-        if (!s->getOffset(offset))
-            offset = DEFAULT_OFFSET;
+        const char *name = s->getName();
+        const char *unit = s->getUnit();
+        int precision = s->getPrecision();
+        float scale = s->getScale();
+        float offset = s->getOffset();
 
         StaticJsonDocument<256> doc;
         doc[CONFIG_KEY_SENSOR_ID] = idx;
@@ -153,7 +143,7 @@ namespace SensorManager
         if (!data[CONFIG_KEY_SENSOR_NAME].isNull())
         {
             const char *newName = data[CONFIG_KEY_SENSOR_NAME];
-            if (!s->setName(newName, strlen(newName)))
+            if (!s->setName(newName))
             {
                 char msg[64] = {};
                 snprintf(msg, sizeof(msg), "sensor %d could not set name", idx);
@@ -164,7 +154,7 @@ namespace SensorManager
         if (!data[CONFIG_KEY_UNIT].isNull())
         {
             const char *newUnit = data[CONFIG_KEY_UNIT];
-            if (!s->setUnit(newUnit, strlen(newUnit)))
+            if (!s->setUnit(newUnit))
             {
                 char msg[64] = {};
                 snprintf(msg, sizeof(msg), "sensor %d could not set unit", idx);
@@ -219,16 +209,12 @@ namespace SensorManager
     {
         for (SensorBase *s : sensors)
         {
-            char name[SENSOR_NAME_LEN] = {};
-            if (!s->getName(name, sizeof(name)))
-                snprintf(name, sizeof(name), "sensor %d", s->getId());
+            const char *name = s->getName();
 
             float value;
             if (s->read(value, false))
             {
-                char unit[SENSOR_UNIT_LEN] = {};
-                if (!s->getUnit(unit, sizeof(unit)))
-                    strlcpy(unit, s->getDefaultUnit(), sizeof(unit));
+                const char *unit = s->getUnit();
                 Serial.printf("[%d] %s (%s): %.2f %s\n", s->getId(), name, s->getType(), value, unit);
             }
             else

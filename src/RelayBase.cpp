@@ -3,9 +3,48 @@
 #include "NvsStorage.h"
 #include <Arduino.h>
 // public
-RelayBase::RelayBase(uint8_t id, const char *type, uint8_t relayIdx) : _id(id), _type(type), _relayIdx(relayIdx)
+RelayBase::RelayBase() {}
+
+bool RelayBase::onboard(uint8_t id, uint8_t relayIdx, const uint8_t *mac, const char *password, const char *type)
 {
-    ensureDefaults();
+    _id = id;
+    _relayIdx = relayIdx;
+    memcpy(_mac, mac, sizeof(_mac));
+    writeDefaults();
+    if (!writeIdentity())
+        return false;
+    if (!writePassword(password))
+        return false;
+    if (!writeType(type))
+        return false;
+    return true;
+}
+
+bool RelayBase::recover(uint8_t id)
+{
+    _id = id;
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
+    nvsNamespace(ns, sizeof(ns));
+    NvsStorage::Session session(ns, true);
+
+    if (!NvsStorage::readBytes(CONFIG_KEY_RELAY_MAC, _mac, sizeof(_mac)))
+        return false;
+
+    int relayIdxTmp;
+    if (!NvsStorage::readInt(CONFIG_KEY_RELAY_IDX, relayIdxTmp))
+        return false;
+    _relayIdx = (uint8_t)relayIdxTmp;
+
+    if (!NvsStorage::readInt(CONFIG_KEY_FAILSAFE_TIMEOUT, _failsafeSeconds))
+        _failsafeSeconds = DEFAULT_FAILSAFE_TIMEOUT_SEC;
+
+    if (!NvsStorage::readString(CONFIG_KEY_RELAY_NAME, _name, sizeof(_name)))
+        snprintf(_name, sizeof(_name), "WifiRelay %d", _id);
+
+    NvsStorage::readString(CONFIG_KEY_RELAY_TYPE, _type, sizeof(_type));
+    NvsStorage::readString(CONFIG_KEY_RELAY_PASSWORD, _password, sizeof(_password));
+
+    return true;
 }
 
 bool RelayBase::remove()
@@ -16,46 +55,51 @@ bool RelayBase::remove()
     return NvsStorage::clearNamespace();
 }
 
-bool RelayBase::getName(char *buffer, size_t len) const
+const char *RelayBase::getName() const
 {
+    return _name;
+}
+bool RelayBase::setName(const char *name)
+{
+    if (strlen(name) >= RELAY_NAME_LEN)
+        return false;
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readString(CONFIG_KEY_RELAY_NAME, buffer, len);
+    NvsStorage::Session session(ns, false);
+    if (!NvsStorage::writeString(CONFIG_KEY_RELAY_NAME, name))
+        return false;
+    strlcpy(_name, name, sizeof(_name));
+    return true;
 }
-bool RelayBase::setName(const char *name, size_t len)
+const char *RelayBase::getType() const
 {
-    if (len < RELAY_NAME_LEN)
-    {
-        char ns[NvsStorage::NVS_KEY_LEN] = {};
-        nvsNamespace(ns, sizeof(ns));
-        NvsStorage::Session session(ns, false);
-        return NvsStorage::writeString(CONFIG_KEY_RELAY_NAME, name);
-    }
-    return false;
+    return _type;
 }
-bool RelayBase::getCurrentState(bool &isOn) const
+const char *RelayBase::getPassword() const
 {
-    isOn = currentState;
+    return _password;
+}
+bool RelayBase::getOutputOn(bool &isOn) const
+{
+    isOn = outputOn;
     return isFound();
 }
-bool RelayBase::getFailsafeSeconds(int &buffer) const
-{
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readInt(CONFIG_KEY_FAILSAFE_TIMEOUT, buffer);
-}
+int RelayBase::getFailsafeSeconds() const { return _failsafeSeconds; }
 bool RelayBase::setFailsafeSeconds(int seconds)
 {
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
-    return NvsStorage::writeInt(CONFIG_KEY_FAILSAFE_TIMEOUT, seconds);
+    if (!NvsStorage::writeInt(CONFIG_KEY_FAILSAFE_TIMEOUT, seconds))
+        return false;
+    _failsafeSeconds = seconds;
+    return true;
 }
 uint8_t RelayBase::getRelayIdx() const { return _relayIdx; }
 uint8_t RelayBase::getId() const { return _id; }
-bool RelayBase::isFound() const {return found; }
+const uint8_t *RelayBase::getMac() const { return _mac; }
+bool RelayBase::isFound() const { return found; }
+void RelayBase::markLost() { found = false; }
 
 // protected
 void RelayBase::nvsNamespace(char *buffer, size_t len) const
@@ -64,23 +108,59 @@ void RelayBase::nvsNamespace(char *buffer, size_t len) const
 }
 
 // private
-void RelayBase::ensureDefaults()
+bool RelayBase::writeType(const char *type)
+{
+    if (strlen(type) >= RELAY_TYPE_LEN)
+        return false;
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
+    nvsNamespace(ns, sizeof(ns));
+    NvsStorage::Session session(ns, false);
+    if (!NvsStorage::writeString(CONFIG_KEY_RELAY_TYPE, type))
+        return false;
+    strlcpy(_type, type, sizeof(_type));
+    return true;
+}
+
+bool RelayBase::writePassword(const char *password)
+{
+    if (strlen(password) >= RELAY_PASSWORD_LEN)
+        return false;
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
+    nvsNamespace(ns, sizeof(ns));
+    NvsStorage::Session session(ns, false);
+    if (!NvsStorage::writeString(CONFIG_KEY_RELAY_PASSWORD, password))
+        return false;
+    strlcpy(_password, password, sizeof(_password));
+    return true;
+}
+
+void RelayBase::writeDefaults()
 {
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
 
-    int dummyFailsafe;
-    if (!NvsStorage::readInt(CONFIG_KEY_FAILSAFE_TIMEOUT, dummyFailsafe))
+    if (!NvsStorage::readInt(CONFIG_KEY_FAILSAFE_TIMEOUT, _failsafeSeconds))
     {
-        NvsStorage::writeInt(CONFIG_KEY_FAILSAFE_TIMEOUT, DEFAULT_FAILSAFE_TIMEOUT_SEC);
+        _failsafeSeconds = DEFAULT_FAILSAFE_TIMEOUT_SEC;
+        NvsStorage::writeInt(CONFIG_KEY_FAILSAFE_TIMEOUT, _failsafeSeconds);
     }
 
-    char dummyName[RELAY_NAME_LEN];
-    if (!NvsStorage::readString(CONFIG_KEY_RELAY_NAME, dummyName, sizeof(dummyName)))
+    if (!NvsStorage::readString(CONFIG_KEY_RELAY_NAME, _name, sizeof(_name)))
     {
-        char defaultName[RELAY_NAME_LEN] = {};
-        snprintf(defaultName, sizeof(defaultName), "WifiRelay %d", _id);
-        NvsStorage::writeString(CONFIG_KEY_RELAY_NAME, defaultName);
+        snprintf(_name, sizeof(_name), "WifiRelay %d", _id);
+        NvsStorage::writeString(CONFIG_KEY_RELAY_NAME, _name);
     }
+}
+
+bool RelayBase::writeIdentity()
+{
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
+    nvsNamespace(ns, sizeof(ns));
+    NvsStorage::Session session(ns, false);
+    if (!NvsStorage::writeBytes(CONFIG_KEY_RELAY_MAC, _mac, sizeof(_mac)))
+        return false;
+    if (!NvsStorage::writeInt(CONFIG_KEY_RELAY_IDX, _relayIdx))
+        return false;
+    return true;
 }

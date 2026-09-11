@@ -22,8 +22,8 @@ private:
     unsigned long lastReadTime = 0;
     float lastValue = 0;
     bool lastValid = false;
-    const char *defaultUnit = "%";
-    int defaultPrecision = 1;
+    static constexpr const char *defaultUnit = "%";
+    static constexpr int defaultPrecision = 1;
 
     bool readRaw(float &buffer) override;
 };

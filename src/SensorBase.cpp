@@ -1,9 +1,9 @@
 #include "SensorBase.h"
 
-SensorBase::SensorBase(uint8_t id, const char *type)
+SensorBase::SensorBase(uint8_t id, const char *type, int defaultPrecision, const char *defaultUnit)
     : _id(id), _type(type)
 {
-    ensureDefaults();
+    ensureDefaults(defaultPrecision, defaultUnit);
 }
 
 bool SensorBase::read(float &value, bool raw)
@@ -12,18 +12,7 @@ bool SensorBase::read(float &value, bool raw)
         return false;
     if (!raw)
     {
-        // Lokale Defaults bewusst hier, nicht in den Gettern: Die Getter geben bei
-        // einem NVS-Fehler absichtlich nur `false` zurück, ohne einen plausibel
-        // aussehenden Ersatzwert zu setzen - ein Aufrufer, der den Rückgabewert
-        // ignoriert, soll keinen unauffällig falschen Wert bekommen (z.B. in der GUI).
-        // Hier im sicherheitskritischen Pfad wird der Rückgabewert geprüft; die
-        // lokalen Defaults sind nur ein zusätzliches Sicherheitsnetz für den Fall
-        // eines Bugs in genau dieser Prüfung.
-        float scale = DEFAULT_SCALE;
-        float offset = DEFAULT_OFFSET;
-        if (!getScale(scale) || !getOffset(offset))
-            return false;
-        value = value * scale + offset;
+        value = value * getScale() + getOffset();
     }
     return true;
 }
@@ -38,32 +27,27 @@ uint8_t SensorBase::getId() const
     return _id;
 }
 
-bool SensorBase::getName(char *buffer, size_t len)
+const char *SensorBase::getName() const
 {
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readString(CONFIG_KEY_SENSOR_NAME, buffer, len);
+    return _name;
 }
 
-bool SensorBase::setName(const char *name, size_t len)
+bool SensorBase::setName(const char *name)
 {
-    if (len < SENSOR_NAME_LEN)
-    {
-        char ns[NvsStorage::NVS_KEY_LEN] = {};
-        nvsNamespace(ns, sizeof(ns));
-        NvsStorage::Session session(ns, false);
-        return NvsStorage::writeString(CONFIG_KEY_SENSOR_NAME, name);
-    }
-    return false;
-}
-
-bool SensorBase::getScale(float &scale) const
-{
+    if (strlen(name) >= SENSOR_NAME_LEN)
+        return false;
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readFloat(CONFIG_KEY_SCALE, scale);
+    NvsStorage::Session session(ns, false);
+    if (!NvsStorage::writeString(CONFIG_KEY_SENSOR_NAME, name))
+        return false;
+    strlcpy(_name, name, sizeof(_name));
+    return true;
+}
+
+float SensorBase::getScale() const
+{
+    return _scale;
 }
 
 bool SensorBase::setScale(float scale)
@@ -71,15 +55,15 @@ bool SensorBase::setScale(float scale)
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
-    return NvsStorage::writeFloat(CONFIG_KEY_SCALE, scale);
+    if (!NvsStorage::writeFloat(CONFIG_KEY_SCALE, scale))
+        return false;
+    _scale = scale;
+    return true;
 }
 
-bool SensorBase::getOffset(float &offset) const
+float SensorBase::getOffset() const
 {
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readFloat(CONFIG_KEY_OFFSET, offset);
+    return _offset;
 }
 
 bool SensorBase::setOffset(float offset)
@@ -87,15 +71,15 @@ bool SensorBase::setOffset(float offset)
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
-    return NvsStorage::writeFloat(CONFIG_KEY_OFFSET, offset);
+    if (!NvsStorage::writeFloat(CONFIG_KEY_OFFSET, offset))
+        return false;
+    _offset = offset;
+    return true;
 }
 
-bool SensorBase::getPrecision(int &precision) const
+int SensorBase::getPrecision() const
 {
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readInt(CONFIG_KEY_PRECISION, precision);
+    return _precision;
 }
 
 bool SensorBase::setPrecision(int precision)
@@ -103,52 +87,67 @@ bool SensorBase::setPrecision(int precision)
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
-    return NvsStorage::writeInt(CONFIG_KEY_PRECISION, precision);
+    if (!NvsStorage::writeInt(CONFIG_KEY_PRECISION, precision))
+        return false;
+    _precision = precision;
+    return true;
 }
 
-bool SensorBase::getUnit(char *buffer, size_t len) const
+const char *SensorBase::getUnit() const
 {
+    return _unit;
+}
+
+bool SensorBase::setUnit(const char *unit)
+{
+    if (strlen(unit) >= SENSOR_UNIT_LEN)
+        return false;
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readString(CONFIG_KEY_UNIT, buffer, len);
+    NvsStorage::Session session(ns, false);
+    if (!NvsStorage::writeString(CONFIG_KEY_UNIT, unit))
+        return false;
+    strlcpy(_unit, unit, sizeof(_unit));
+    return true;
 }
 
-bool SensorBase::setUnit(const char *unit, size_t len)
-{
-    if (len < SENSOR_UNIT_LEN)
-    {
-        char ns[NvsStorage::NVS_KEY_LEN] = {};
-        nvsNamespace(ns, sizeof(ns));
-        NvsStorage::Session session(ns, false);
-        return NvsStorage::writeString(CONFIG_KEY_UNIT, unit);
-    }
-    return false;
-}
 
 void SensorBase::nvsNamespace(char *buffer, size_t len) const
 {
     snprintf(buffer, len, "sensor_%d", _id);
 }
 
-void SensorBase::ensureDefaults()
+void SensorBase::ensureDefaults(int defaultPrecision, const char *defaultUnit)
 {
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
 
-    float dummyScale;
-    if (!NvsStorage::readFloat(CONFIG_KEY_SCALE, dummyScale))
+    if (!NvsStorage::readFloat(CONFIG_KEY_SCALE, _scale))
     {
-        NvsStorage::writeFloat(CONFIG_KEY_SCALE, DEFAULT_SCALE);
-        NvsStorage::writeFloat(CONFIG_KEY_OFFSET, DEFAULT_OFFSET);
+        _scale = DEFAULT_SCALE;
+        NvsStorage::writeFloat(CONFIG_KEY_SCALE, _scale);
+    }
+    if (!NvsStorage::readFloat(CONFIG_KEY_OFFSET, _offset))
+    {
+        _offset = DEFAULT_OFFSET;
+        NvsStorage::writeFloat(CONFIG_KEY_OFFSET, _offset);
     }
 
-    char dummyName[SENSOR_NAME_LEN];
-    if (!NvsStorage::readString(CONFIG_KEY_SENSOR_NAME, dummyName, sizeof(dummyName)))
+    if (!NvsStorage::readString(CONFIG_KEY_SENSOR_NAME, _name, sizeof(_name)))
     {
-        char defaultName[SENSOR_NAME_LEN] = {};
-        snprintf(defaultName, sizeof(defaultName), "Sensor %d", _id);
-        NvsStorage::writeString(CONFIG_KEY_SENSOR_NAME, defaultName);
+        snprintf(_name, sizeof(_name), "Sensor %d", _id);
+        NvsStorage::writeString(CONFIG_KEY_SENSOR_NAME, _name);
+    }
+
+    if (!NvsStorage::readInt(CONFIG_KEY_PRECISION, _precision))
+    {
+        _precision = defaultPrecision;
+        NvsStorage::writeInt(CONFIG_KEY_PRECISION, _precision);
+    }
+    if (!NvsStorage::readString(CONFIG_KEY_UNIT, _unit, sizeof(_unit)))
+    {
+        strlcpy(_unit, defaultUnit, sizeof(_unit));
+        NvsStorage::writeString(CONFIG_KEY_UNIT, _unit);
     }
 }

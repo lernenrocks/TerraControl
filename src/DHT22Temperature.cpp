@@ -5,13 +5,9 @@ namespace
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 2000ul;
 }
 
-DHT22Temperature::DHT22Temperature(DHT *dht, uint8_t id) : SensorBase(id, "DHT22 Temperature"), dht(dht)
+DHT22Temperature::DHT22Temperature(DHT *dht, uint8_t id)
+    : SensorBase(id, "DHT22 Temperature", defaultPrecision, defaultUnit), dht(dht)
 {
-    int dummy;
-    if (!getPrecision(dummy))
-    {
-        reset();
-    }
 }
 
 bool DHT22Temperature::getCalibrationJson(char *buffer, size_t len)
@@ -38,7 +34,7 @@ void DHT22Temperature::reset()
     setScale(DEFAULT_SCALE);
     setOffset(DEFAULT_OFFSET);
     setPrecision(defaultPrecision);
-    setUnit(defaultUnit, strlen(defaultUnit));
+    setUnit(defaultUnit);
 }
 const char *DHT22Temperature::getDefaultUnit() const { return defaultUnit; }
 int DHT22Temperature::getDefaultPrecision() const { return defaultPrecision; }

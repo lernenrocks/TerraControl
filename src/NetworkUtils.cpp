@@ -18,6 +18,10 @@ namespace NetworkUtils
         snprintf(out,len,"%02x%02x%02x%02x%02x%02x",
             byteMac[0],byteMac[1],byteMac[2],byteMac[3],byteMac[4],byteMac[5]);
     }
+    bool macCharToBytes(uint8_t byteMac[6], const char *mac){
+        return sscanf(mac, "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx",
+            &byteMac[0],&byteMac[1],&byteMac[2],&byteMac[3],&byteMac[4],&byteMac[5]) == 6;
+    }
     void ipToChar(char *out, const uint32_t ip,size_t len){
         // uint32_t guarantees exactly 32 bits — portable across platforms.
         // ip stores all four octets consecutively (little-endian: first octet in lowest bits).

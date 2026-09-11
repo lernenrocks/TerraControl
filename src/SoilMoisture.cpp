@@ -4,13 +4,9 @@ namespace
 {
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 500ul;
 }
-SoilMoisture::SoilMoisture(uint8_t pin, uint8_t id) : SensorBase(id, "Soil Moisture"), pin(pin)
+SoilMoisture::SoilMoisture(uint8_t pin, uint8_t id)
+    : SensorBase(id, "Soil Moisture", defaultPrecision, defaultUnit), pin(pin)
 {
-    int dummy;
-    if (!getPrecision(dummy))
-    {
-        reset();
-    }
 }
 
 bool SoilMoisture::getCalibrationJson(char *buffer, size_t len)
@@ -65,7 +61,7 @@ void SoilMoisture::reset()
     setScale(DEFAULT_SCALE);
     setOffset(DEFAULT_OFFSET);
     setPrecision(defaultPrecision);
-    setUnit(defaultUnit, strlen(defaultUnit));
+    setUnit(defaultUnit);
 }
 const char *SoilMoisture::getDefaultUnit() const { return defaultUnit; }
 int SoilMoisture::getDefaultPrecision() const { return defaultPrecision; }
