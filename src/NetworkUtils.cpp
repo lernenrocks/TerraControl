@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "NetworkUtils.h"
-
+#include <cstdio>
 namespace NetworkUtils
 {
     void normalizeMac(char *mac)
@@ -14,15 +14,20 @@ namespace NetworkUtils
             }
         }
     }
-    void macBytesToChar(char *out, const uint8_t byteMac[6], size_t len){
+    bool macBytesToChar(char *out, const uint8_t byteMac[6], size_t len){
+        if (len < MAC_STRING_LEN)
+            return false;
         snprintf(out,len,"%02x%02x%02x%02x%02x%02x",
             byteMac[0],byteMac[1],byteMac[2],byteMac[3],byteMac[4],byteMac[5]);
+        return true;
     }
     bool macCharToBytes(uint8_t byteMac[6], const char *mac){
         return sscanf(mac, "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx",
             &byteMac[0],&byteMac[1],&byteMac[2],&byteMac[3],&byteMac[4],&byteMac[5]) == 6;
     }
-    void ipToChar(char *out, const uint32_t ip,size_t len){
+    bool ipToChar(char *out, const uint32_t ip,size_t len){
+        if (len < IP_LEN)
+            return false;
         // uint32_t guarantees exactly 32 bits — portable across platforms.
         // ip stores all four octets consecutively (little-endian: first octet in lowest bits).
         // 0xFF has only the lowest 8 bits set, rest are 0.
@@ -33,5 +38,6 @@ namespace NetworkUtils
         (ip >> 8) & 0xFF,
         (ip >> 16) & 0xFF,
         (ip >> 24) & 0xFF);
+        return true;
     }
 }

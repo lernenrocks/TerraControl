@@ -19,7 +19,7 @@ constexpr const char CONFIG_KEY_SENSOR_ID[] = "id";
 class SensorBase
 {
 public:
-    SensorBase(uint8_t id, const char *type, int defaultPrecision, const char *defaultUnit);
+    SensorBase(uint8_t sensorId, const char *type, int defaultPrecision, const char *defaultUnit);
     virtual ~SensorBase() = default;
 
     bool read(float &value, bool raw);
@@ -42,13 +42,13 @@ public:
     bool setUnit(const char *unit);
 
     const char *getType() const;
-    uint8_t getId() const;
+    uint8_t getSensorId() const;
 
 protected:
     void nvsNamespace(char *buffer, size_t len) const;
 
 private:
-    uint8_t _id;
+    uint8_t _sensorId;
     const char *_type;
     char _name[SENSOR_NAME_LEN] = {};
     float _scale = DEFAULT_SCALE;

@@ -5,8 +5,8 @@ namespace
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 2000ul;
 }
 
-DHT22Humidity::DHT22Humidity(DHT *dht, uint8_t id)
-    : SensorBase(id, "DHT22 Humidity", defaultPrecision, defaultUnit), dht(dht)
+DHT22Humidity::DHT22Humidity(DHT *dht, uint8_t sensorId)
+    : SensorBase(sensorId, "DHT22 Humidity", defaultPrecision, defaultUnit), dht(dht)
 {
 }
 

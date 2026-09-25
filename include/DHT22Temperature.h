@@ -6,7 +6,7 @@
 class DHT22Temperature : public SensorBase
 {
 public:
-    DHT22Temperature(DHT *dht, uint8_t id);
+    DHT22Temperature(DHT *dht, uint8_t sensorId);
     ~DHT22Temperature()=default;
     bool getCalibrationJson(char *buffer, size_t len) override;
     bool getCalibrationValuesJson(char *buffer, size_t len) override;

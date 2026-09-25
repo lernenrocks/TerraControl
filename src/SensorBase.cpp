@@ -1,7 +1,7 @@
 #include "SensorBase.h"
 
-SensorBase::SensorBase(uint8_t id, const char *type, int defaultPrecision, const char *defaultUnit)
-    : _id(id), _type(type)
+SensorBase::SensorBase(uint8_t sensorId, const char *type, int defaultPrecision, const char *defaultUnit)
+    : _sensorId(sensorId), _type(type)
 {
     ensureDefaults(defaultPrecision, defaultUnit);
 }
@@ -22,9 +22,9 @@ const char *SensorBase::getType() const
     return _type;
 }
 
-uint8_t SensorBase::getId() const
+uint8_t SensorBase::getSensorId() const
 {
-    return _id;
+    return _sensorId;
 }
 
 const char *SensorBase::getName() const
@@ -114,7 +114,7 @@ bool SensorBase::setUnit(const char *unit)
 
 void SensorBase::nvsNamespace(char *buffer, size_t len) const
 {
-    snprintf(buffer, len, "sensor_%d", _id);
+    snprintf(buffer, len, "sensor_%d", _sensorId);
 }
 
 void SensorBase::ensureDefaults(int defaultPrecision, const char *defaultUnit)
@@ -136,7 +136,7 @@ void SensorBase::ensureDefaults(int defaultPrecision, const char *defaultUnit)
 
     if (!NvsStorage::readString(CONFIG_KEY_SENSOR_NAME, _name, sizeof(_name)))
     {
-        snprintf(_name, sizeof(_name), "Sensor %d", _id);
+        snprintf(_name, sizeof(_name), "Sensor %d", _sensorId);
         NvsStorage::writeString(CONFIG_KEY_SENSOR_NAME, _name);
     }
 

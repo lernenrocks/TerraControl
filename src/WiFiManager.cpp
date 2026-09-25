@@ -3,18 +3,17 @@
 #include <Arduino.h>
 #include "WiFiManager.h"
 #include "wifi_config.h"
-#include "DataHub.h"
 #include "DigestAuth.h"
 #include "HttpClient.h"
-#include "JsonParser.h"
-#include "WiFiWorker.h"
-#define WIFI_CONNECTION_TIMEOUT 60000UL /**< @brief 60 second timeout for WiFi connection */
+#include "System.h"
+#include "Logger.h"
+#include "SecureUtils.h"
+#include "NetworkUtils.h"
+#include "esp_wifi.h"
+#include "esp_netif_sta_list.h"
+constexpr unsigned long WIFI_RETRY_INTERVAL = 10000; /**< @brief 10 second try to connect to STA */
 
 #define URI_LEN 64
-
-const char uriShellyGetStatus[] = "rpc/Shelly.GetStatus";
-const char shellyUser[] = RELAY_USER;
-const char shellyPass[] = TERRA_CONTROL_PW;
 
 namespace WiFiManager
 {
@@ -23,100 +22,78 @@ namespace WiFiManager
         Serial.println("Initialisiere WiFi Modul");
         WiFi.disconnect(true);
         delay(1000);
-        DataHub::SystemData systemData;
-        DataHub::getSystemData(systemData);
-        WiFi.softAP(systemData.deviceName, AP_WIFI_PW); // set credentials for Access Point
-        WiFi.mode(WIFI_AP_STA);         // starts Access Point and Station Point Mode
-        WiFi.setAutoConnect(true);      // try reconnect if connection is lost
-        WiFi.begin(WIFI_SSID, WIFI_PW); // start Wifi with STA Credentials
-        long lastTry = millis();
-        Serial.print("Verbinde WiFi ..");
-        while (WiFi.status() != WL_CONNECTED)
+        char deviceName[SYSTEM_DEVICE_NAME_LEN] = {};
+        char devicePassword[SYSTEM_DEVICE_PASSWORD_LEN] = {};
+        if (!System::getDeviceName(deviceName, sizeof(deviceName)) || !System::getDevicePassword(devicePassword, sizeof(devicePassword)))
         {
-            if (millis() - lastTry < WIFI_CONNECTION_TIMEOUT)
-            {
-                Serial.print('.');
-                delay(500);
-            }
-            else
-            {
-                DataHub::setWifiStatus({});
-                return false;
-            }
+            return false;
         }
-        WiFiWorker::start();
+        WiFi.softAP(deviceName, devicePassword,1,0,10);
+        SecureUtils::ensureZero(devicePassword, sizeof(devicePassword));
+        // set credentials for Access Point
+        WiFi.mode(WIFI_AP_STA);       // starts Access Point and Station Point Mode
+        WiFi.setAutoReconnect(false); // prevent reconnect polling
         return true;
     }
-
-    void updateWifiStatus()
+    void syncStaConnection()
     {
-        if (WiFi.status() != WL_CONNECTED)
+        static unsigned long lastAttempt = 0 - WIFI_RETRY_INTERVAL;
+        if (System::isStaMode() && WiFi.status() == WL_CONNECTED)
         {
             return;
         }
-        DataHub::WiFiStatus status;
-        //? rewrite to use SSID from preferences/NVS
-        strncpy(status.ssid, WIFI_SSID, sizeof(status.ssid) - 1);
-        IPAddress ip = WiFi.localIP();
-        snprintf(status.ipV4Adress, sizeof(status.ipV4Adress),
-                 "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
-        status.rssi = WiFi.RSSI();
-        DataHub::setWifiStatus(status);
+        else if (System::isStaMode() && (WiFi.status() != WL_CONNECTED))
+        {
+            if (millis() - lastAttempt >= WIFI_RETRY_INTERVAL)
+            {
+                char ssid[SYSTEM_STA_SSID_LEN] = {};
+                char pw[SYSTEM_STA_PASSWORD_LEN] = {};
+                System::getStaSsid(ssid, sizeof(ssid));
+                System::getStaPassword(pw, sizeof(pw));
+                WiFi.begin(ssid, pw);
+                SecureUtils::ensureZero(ssid, sizeof(ssid));
+                SecureUtils::ensureZero(pw, sizeof(pw));
+            }
+        }
+        else if (!System::isStaMode() && (WiFi.status() == WL_CONNECTED))
+        {
+            WiFi.disconnect();
+        }
     }
 
-    bool switchRelay(DataHub::WifiRelay relay, bool switchOn)
+    bool getRssi(int &rssi)
     {
-        char uri[URI_LEN] = {};
-        if (!relay.inUse)
+        if (WiFi.status() != WL_CONNECTED)
         {
-            Serial.println("[WARN] Schaltversuch eines ungültigen WiFiRelays");
             return false;
         }
-        if (switchOn)
-        {
-            snprintf(uri, sizeof(uri), "rpc/Switch.Set?id=%d&on=true&toggle_after=%ld",
-                     relay.id, relay.switchDuration / 1000);
-        }
-        else
-        {
-            snprintf(uri, sizeof(uri), "rpc/Switch.Set?id=%d&on=false",
-                     relay.id);
-        }
-       // Serial.println("Schalte Shelly:");
-       // DataHub::wifiRelayToSerial(relay); // Debug
-        WiFiClient wifiClient;
-        int code = DigestAuth::digestAuthRequest(relay.ipV4Adress, uri, shellyUser, shellyPass, wifiClient);
-        wifiClient.stop();
-        if (code != 200)
-        {
-            Serial.printf("[%lus][ERROR] Switch.Set fehlgeschlagen, HTTP %d\n", millis() / 1000, code);
-            return false;
-        }
+        rssi = WiFi.RSSI();
         return true;
     }
 
-    int updateRelayStatus(char *ip)
+    bool getLocalIp(char *buffer, size_t len)
     {
-        WiFiClient wifiClient;
-        int code = DigestAuth::digestAuthRequest(ip, uriShellyGetStatus, shellyUser, shellyPass, wifiClient);
-        if (code != 200)
+        if (WiFi.status() != WL_CONNECTED)
         {
-            wifiClient.stop();
-            Serial.printf("[%lus][ERROR] GET_STATUS HTTP %d für %s\n", millis() / 1000, code, ip);
-            return code;
+            return false;
         }
-        unsigned long bodyWait = millis();
-        while (!wifiClient.available() && (millis() - bodyWait) < TCP_MAX_TIME)
+        IPAddress ip = WiFi.localIP();
+        return NetworkUtils::ipToChar(buffer, (uint32_t)ip, len);
+    }
+
+    bool resolveIp(const uint8_t *mac, char *buffer, size_t len)
+    {
+        wifi_sta_list_t staList = {};
+        esp_netif_sta_list_t netifList = {};
+        esp_wifi_ap_get_sta_list(&staList);
+        esp_netif_get_sta_list(&staList, &netifList);
+        for (size_t i = 0; i < netifList.num; i++)
         {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            if (memcmp(mac, netifList.sta[i].mac, MAC_LEN) == 0)
+            {
+                return NetworkUtils::ipToChar(buffer, netifList.sta[i].ip.addr, len);
+            }
         }
-        wifiClient.setTimeout(TCP_MAX_TIME);
-        bool success = JsonParser::parseJson(wifiClient, JsonParser::TargetType::WIFI_RELAY_STATUS) == JsonParser::ParseResult::OK;
-        if (!success)
-        {
-            Serial.printf("[%lus][ERROR] Body Parsing Fehler in WiFiManager::updateRelayStatus\n", millis() / 1000);
-        }
-        wifiClient.stop();
-        return success ? 200 : 0;
+        return false;
     }
 }

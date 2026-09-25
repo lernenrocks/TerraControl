@@ -8,7 +8,7 @@ constexpr const char CALIBRATE_KEY_WET[] = "cWet";
 class SoilMoisture : public SensorBase
 {
 public:
-    SoilMoisture(uint8_t pin, uint8_t id);
+    SoilMoisture(uint8_t pin, uint8_t sensorId);
     ~SoilMoisture()=default;
     bool getCalibrationJson(char *buffer, size_t len) override;
     bool getCalibrationValuesJson(char *buffer, size_t len) override;

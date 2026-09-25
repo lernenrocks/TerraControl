@@ -9,8 +9,7 @@
 #include <esp_system.h>
 #include "wifi_config.h"
 #include "WiFiManager.h"
-#include "WiFiWorker.h"
-#include "DataHub.h"
+#include "NetworkWorker.h"
 #include "SensorManager.h"
 #include "SoilMoisture.h"
 #include "SensorTypes.h" // @note remove if loading from JSON is implemented
@@ -92,6 +91,7 @@ void setup()
   Serial.println("--- Sensor-Konfiguration ---");
   SensorManager::printSensorConfigsToSerial();
 
+  NetworkWorker::start();
   Serial.println("Setup beendet.");
 }
 

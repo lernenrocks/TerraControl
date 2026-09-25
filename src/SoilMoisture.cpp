@@ -4,8 +4,8 @@ namespace
 {
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 500ul;
 }
-SoilMoisture::SoilMoisture(uint8_t pin, uint8_t id)
-    : SensorBase(id, "Soil Moisture", defaultPrecision, defaultUnit), pin(pin)
+SoilMoisture::SoilMoisture(uint8_t pin, uint8_t sensorId)
+    : SensorBase(sensorId, "Soil Moisture", defaultPrecision, defaultUnit), pin(pin)
 {
 }
 

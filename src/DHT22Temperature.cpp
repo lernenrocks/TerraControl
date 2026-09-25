@@ -5,8 +5,8 @@ namespace
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 2000ul;
 }
 
-DHT22Temperature::DHT22Temperature(DHT *dht, uint8_t id)
-    : SensorBase(id, "DHT22 Temperature", defaultPrecision, defaultUnit), dht(dht)
+DHT22Temperature::DHT22Temperature(DHT *dht, uint8_t sensorId)
+    : SensorBase(sensorId, "DHT22 Temperature", defaultPrecision, defaultUnit), dht(dht)
 {
 }
 

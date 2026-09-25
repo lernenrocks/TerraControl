@@ -2,7 +2,10 @@
 
 
 #include <WiFiClient.h>
-#include "DataHub.h"
+
+constexpr size_t MAC_LEN = 6;         // raw MAC address bytes
+constexpr size_t MAC_STRING_LEN = 13; // normalized hex MAC string incl. terminator, e.g. "8cbfeaa03350"
+constexpr size_t IP_LEN = 16;         // "255.255.255.255" incl. terminator
 
 namespace NetworkUtils
 {
@@ -18,8 +21,9 @@ namespace NetworkUtils
      * @param out buffer for mac as char
      * @param byteMac mac as byte array to convert
      * @param len length of the buffer to write
+     * @return true on success, false if the buffer is too small (< MAC_STRING_LEN)
     */
-    void macBytesToChar(char *out, const uint8_t byteMac[6], size_t len);
+    bool macBytesToChar(char *out, const uint8_t byteMac[6], size_t len);
 
     /**
      * @brief converts a mac address given as char array to bytes
@@ -34,7 +38,8 @@ namespace NetworkUtils
      * @param out buffer for ip as char
      * @param ip id address to convert
      * @param len length of the buffer to write
+     * @return true on success, false if the buffer is too small (< IP_LEN)
      */
-    void ipToChar(char *out, const uint32_t ip,size_t len);
+    bool ipToChar(char *out, const uint32_t ip,size_t len);
 }
 

@@ -12,11 +12,11 @@ namespace
     std::vector<SensorBase *> sensors;
     DHT dht[MAX_DHT_22] = {DHT(DHTPIN_0, DHT22), DHT(DHTPIN_1, DHT22), DHT(DHTPIN_2, DHT22), DHT(DHTPIN_3, DHT22)};
     uint8_t sensorCount = 0;
-    SensorBase *find(const uint8_t idx)
+    SensorBase *find(const uint8_t sensorId)
     {
         for (SensorBase *s : sensors)
         {
-            if (s->getId() == idx)
+            if (s->getSensorId() == sensorId)
             {
                 return s;
             }
@@ -75,39 +75,39 @@ namespace SensorManager
         }
         return success;
     }
-    bool readSensor(float &value, bool raw, uint8_t idx)
+    bool readSensor(float &value, bool raw, uint8_t sensorId)
     {
-        SensorBase *s = find(idx);
+        SensorBase *s = find(sensorId);
         if (!s)
             return false;
         return s->read(value, raw);
     }
 
-    bool getSensorCalibrationJson(char *buffer, size_t len, uint8_t idx)
+    bool getSensorCalibrationJson(char *buffer, size_t len, uint8_t sensorId)
     {
-        SensorBase *s = find(idx);
+        SensorBase *s = find(sensorId);
         if (!s)
             return false;
         return s->getCalibrationJson(buffer, len);
     }
 
-    bool getSensorCalibrationValuesJson(char *buffer, size_t len, uint8_t idx)
+    bool getSensorCalibrationValuesJson(char *buffer, size_t len, uint8_t sensorId)
     {
-        SensorBase *s = find(idx);
+        SensorBase *s = find(sensorId);
         if (!s)
             return false;
         return s->getCalibrationValuesJson(buffer, len);
     }
-    bool calibrateSensorHardware(JsonObjectConst data, uint8_t idx)
+    bool calibrateSensorHardware(JsonObjectConst data, uint8_t sensorId)
     {
-        SensorBase *s = find(idx);
+        SensorBase *s = find(sensorId);
         if (!s)
             return false;
         return s->calibrateSensorHardware(data);
     }
-    bool getSensorConfigJson(char *buffer, size_t len, uint8_t idx)
+    bool getSensorConfigJson(char *buffer, size_t len, uint8_t sensorId)
     {
-        SensorBase *s = find(idx);
+        SensorBase *s = find(sensorId);
         if (!s)
             return false;
         const char *type = s->getType();
@@ -118,7 +118,7 @@ namespace SensorManager
         float offset = s->getOffset();
 
         StaticJsonDocument<256> doc;
-        doc[CONFIG_KEY_SENSOR_ID] = idx;
+        doc[CONFIG_KEY_SENSOR_ID] = sensorId;
         doc[CONFIG_KEY_SENSOR_TYPE] = type;
         doc[CONFIG_KEY_SENSOR_NAME] = name;
         doc[CONFIG_KEY_SCALE] = scale;
@@ -134,9 +134,9 @@ namespace SensorManager
         serializeJson(doc, buffer, len);
         return true;
     }
-    bool calibrateSensorConfig(JsonObjectConst data, uint8_t idx)
+    bool calibrateSensorConfig(JsonObjectConst data, uint8_t sensorId)
     {
-        SensorBase *s = find(idx);
+        SensorBase *s = find(sensorId);
         if (!s)
             return false;
         bool success = true;
@@ -146,7 +146,7 @@ namespace SensorManager
             if (!s->setName(newName))
             {
                 char msg[64] = {};
-                snprintf(msg, sizeof(msg), "sensor %d could not set name", idx);
+                snprintf(msg, sizeof(msg), "sensor %d could not set name", sensorId);
                 Logger::log(Logger::ErrorLevel::WARN, msg);
                 success = false;
             }
@@ -157,7 +157,7 @@ namespace SensorManager
             if (!s->setUnit(newUnit))
             {
                 char msg[64] = {};
-                snprintf(msg, sizeof(msg), "sensor %d could not set unit", idx);
+                snprintf(msg, sizeof(msg), "sensor %d could not set unit", sensorId);
                 Logger::log(Logger::ErrorLevel::WARN, msg);
                 success = false;
             }
@@ -168,7 +168,7 @@ namespace SensorManager
             if (!s->setScale(newScale))
             {
                 char msg[64] = {};
-                snprintf(msg, sizeof(msg), "sensor %d could not set scale", idx);
+                snprintf(msg, sizeof(msg), "sensor %d could not set scale", sensorId);
                 Logger::log(Logger::ErrorLevel::WARN, msg);
                 success = false;
             }
@@ -179,7 +179,7 @@ namespace SensorManager
             if (!s->setOffset(newOffset))
             {
                 char msg[64] = {};
-                snprintf(msg, sizeof(msg), "sensor %d could not set offset", idx);
+                snprintf(msg, sizeof(msg), "sensor %d could not set offset", sensorId);
                 Logger::log(Logger::ErrorLevel::WARN, msg);
                 success = false;
             }
@@ -190,16 +190,16 @@ namespace SensorManager
             if (!s->setPrecision(newPrecision))
             {
                 char msg[64] = {};
-                snprintf(msg, sizeof(msg), "sensor %d could not set precision", idx);
+                snprintf(msg, sizeof(msg), "sensor %d could not set precision", sensorId);
                 Logger::log(Logger::ErrorLevel::WARN, msg);
                 success = false;
             }
         }
         return success;
     }
-    void resetSensor(uint8_t idx)
+    void resetSensor(uint8_t sensorId)
     {
-        SensorBase *s = find(idx);
+        SensorBase *s = find(sensorId);
         if (!s)
             return;
         s->reset();
@@ -215,11 +215,11 @@ namespace SensorManager
             if (s->read(value, false))
             {
                 const char *unit = s->getUnit();
-                Serial.printf("[%d] %s (%s): %.2f %s\n", s->getId(), name, s->getType(), value, unit);
+                Serial.printf("[%d] %s (%s): %.2f %s\n", s->getSensorId(), name, s->getType(), value, unit);
             }
             else
             {
-                Serial.printf("[%d] %s (%s): invalid\n", s->getId(), name, s->getType());
+                Serial.printf("[%d] %s (%s): invalid\n", s->getSensorId(), name, s->getType());
             }
         }
     }
@@ -229,7 +229,7 @@ namespace SensorManager
         for (SensorBase *s : sensors)
         {
             char buffer[256];
-            if (getSensorConfigJson(buffer, sizeof(buffer), s->getId()))
+            if (getSensorConfigJson(buffer, sizeof(buffer), s->getSensorId()))
             {
                 Serial.println(buffer);
             }

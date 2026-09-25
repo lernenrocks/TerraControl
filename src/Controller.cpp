@@ -1,8 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "Controller.h"
-#include "DataHub.h"
-#include "WiFiWorker.h"
-#include "WiFiWorkerTypes.h"
+#include "NetworkWorker.h"
 #include "SensorManager.h"
 #include <Arduino.h>
 
@@ -36,7 +34,7 @@ namespace
             {
                // Serial.printf("[CTRL] Relay[%d] %s → GET_STATUS\n", i, relay.name);
                 lastStatusRequest[i] = now;
-                WiFiWorker::queueRelayCommand(i, WiFiWorker::RelayCommand::GET_STATUS);
+                NetworkWorker::queueRelayCommand(i, NetworkWorker::RelayCommand::GET_STATUS);
             }
         }
     }
@@ -61,14 +59,14 @@ namespace
                 {
                    // Serial.printf("[CTRL] Relay[%d] %s → SWITCH_ON\n", i, relay.name);
                     lastSwitchOn[i] = now;
-                    WiFiWorker::queueRelayCommand(i, WiFiWorker::RelayCommand::SWITCH_ON);
+                    NetworkWorker::queueRelayCommand(i, NetworkWorker::RelayCommand::SWITCH_ON);
                 }
                 break;
             case RelayTypes::RelayMode::FORCED_OFF:
                 if (relay.output)
                 {
                    // Serial.printf("[CTRL] Relay[%d] %s → SWITCH_OFF\n", i, relay.name);
-                    WiFiWorker::queueRelayCommand(i, WiFiWorker::RelayCommand::SWITCH_OFF);
+                    NetworkWorker::queueRelayCommand(i, NetworkWorker::RelayCommand::SWITCH_OFF);
                 }
                 break;
             case RelayTypes::RelayMode::AUTO:

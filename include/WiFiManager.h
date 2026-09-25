@@ -1,5 +1,4 @@
 #pragma once
-#include "DataHub.h"
 #include <Arduino.h>
 // WiFiManager - Neuaufbau
 // Minimale Struktur für ESP32 ohne angeschlossene Hardware
@@ -12,11 +11,23 @@ namespace WiFiManager
      */
     bool initWiFi();
 
+    void syncStaConnection();
+    bool resolveIp(const uint8_t *mac, char *buffer, size_t len);
+
     /**
-     * @brief Liest aktuellen WiFi-Status (SSID, IP, RSSI) und schreibt ihn in den DataHub.
-     *        Tut nichts, wenn WiFi nicht verbunden.
+     * @brief Liest die aktuelle STA-Signalstärke.
+     * @param rssi Zielvariable für RSSI in dBm.
+     * @return true bei Erfolg, false wenn nicht verbunden.
      */
-    void updateWifiStatus();
+    bool getRssi(int &rssi);
+
+    /**
+     * @brief Liest die aktuelle STA-IPv4-Adresse.
+     * @param buffer Zielpuffer für die IP als String.
+     * @param len Größe des Zielpuffers.
+     * @return true bei Erfolg, false wenn nicht verbunden.
+     */
+    bool getLocalIp(char *buffer, size_t len);
 
     /**
      * @brief Fragt den Shelly-Status unter der angegebenen IP ab und aktualisiert den DataHub.
@@ -26,12 +37,5 @@ namespace WiFiManager
      */
     int updateRelayStatus(char *ip);
 
-    /**
-     * @brief Schaltet ein Relay eines Shelly per Legacy HTTP-Endpoint und aktualisiert danach den Status.
-     * @param relay wifiRelay entry to switch
-     * @param Switchon true = switch relay on, false = switch Relay off.
-     * @return true, if wifiRelay was found
-     */
-    bool switchRelay(DataHub::WifiRelay relay, bool switchOn);
 
 }
