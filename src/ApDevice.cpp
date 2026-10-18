@@ -6,16 +6,62 @@
 #include "EntityType.h"
 #include "ShellyGen2Relay.h"
 
-ApDevice::ApDevice(const uint8_t id) : _id(id)
+ApDevice::ApDevice(const uint8_t id) : _id(id) {}
+
+ApDevice *ApDevice::recover(uint8_t id)
+{
+    ApDevice *device = new (std::nothrow) ApDevice(id);
+    if (!device)
+        return nullptr;
+    if (!device->load())
+    {
+        delete device;
+        return nullptr;
+    }
+    return device;
+}
+ApDevice *ApDevice::onboard(uint8_t id, JsonObjectConst data)
+{
+    ApDevice *device = new (std::nothrow) ApDevice(id);
+    if (!device)
+        return nullptr;
+    if (!device->write(data))
+    {
+        delete device;
+        return nullptr;
+    }
+    return device;
+}
+
+bool ApDevice::load()
 {
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
-    uint8_t entityList[UINT8_MAX] = {0};
     uint8_t entityCount = 0;
     {
         NvsStorage::Session session(ns, true);
 
-        NvsStorage::readBytes(CONFIG_KEY_ENTITY_TYPES, entityList, sizeof(entityList));
+        if (!NvsStorage::readBytes(CONFIG_KEY_DEVICE_MAC, _mac, sizeof(_mac)))
+            return false;
+        if (!NvsStorage::readString(CONFIG_KEY_DEVICE_USERNAME, _username, sizeof(_username)))
+        {
+            char msg[64] = {};
+            snprintf(msg, sizeof(msg), "no Username in ApDevice id: %d", _id);
+            Logger::log(Logger::ErrorLevel::ERROR, msg);
+        }
+        NvsStorage::readString(CONFIG_KEY_DEVICE_NAME, _name, sizeof(_name)); // optional, empty if missing
+        int type = 0;
+        if (NvsStorage::readInt(CONFIG_KEY_DEVICE_TYPE, type) && type >= 0 && type <= UINT8_MAX)
+        {
+            _deviceType = static_cast<DeviceType>(type);
+        }
+        else
+        {
+            char msg[64] = {};
+            snprintf(msg, sizeof(msg), "no type in ApDevice id: %d", _id);
+            Logger::log(Logger::ErrorLevel::ERROR, msg);
+            _deviceType = DeviceType::NONE;
+        }
         int count = 0;
         if (!NvsStorage::readInt(CONFIG_KEY_ENTITY_COUNT, count) || count <= 0 || count > UINT8_MAX)
         {
@@ -30,12 +76,50 @@ ApDevice::ApDevice(const uint8_t id) : _id(id)
         }
     }
 
+    // The device session is closed - each entity reads its prefixed keys from the device
+    // namespace in its own session, one at a time (NvsStorage's semaphore does not nest).
     entities.reserve(entityCount);
     for (uint8_t i = 0; i < entityCount; i++)
     {
-        EntityBase *entity = createEntity(static_cast<EntityType>(entityList[i]), i);
-        if (entity)
-            entities.push_back(entity);
+        EntityBase *entity = recoverEntity(EntityBase::readType(ns, i), i);
+        if (!entity)
+        {
+            char msg[64] = {};
+            snprintf(msg, sizeof(msg), "WiFi Decive %d entity %d could not be loaded", _id, i);
+            Logger::log(Logger::ErrorLevel::ERROR, msg);
+            continue;
+        }
+        entities.push_back(entity);
+    }
+    return true;
+}
+EntityBase *ApDevice::recoverEntity(EntityType type, uint8_t idx)
+{
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
+    nvsNamespace(ns, sizeof(ns));
+    switch (type)
+    {
+    case EntityType::SHELLY_GEN2_RELAY: // fall through
+    case EntityType::SHELLY_GEN3_RELAY:
+    case EntityType::SHELLY_GEN3_PLUG_S:
+        return ShellyGen2Relay::recover(ns, idx, type);
+    default:
+        return nullptr;
+    }
+}
+EntityBase *ApDevice::onboardEntity(JsonObjectConst data, uint8_t idx)
+{
+    EntityType type = entityTypeFromString(data["type"] | "");
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
+    nvsNamespace(ns, sizeof(ns));
+    switch (type)
+    {
+    case EntityType::SHELLY_GEN2_RELAY: // fall through
+    case EntityType::SHELLY_GEN3_RELAY:
+    case EntityType::SHELLY_GEN3_PLUG_S:
+        return ShellyGen2Relay::onboard(ns, idx, type, data);
+    default:
+        return nullptr;
     }
 }
 // Onboarding: builds a new device from the JSON the worker assembled:
@@ -49,9 +133,8 @@ ApDevice::ApDevice(const uint8_t id) : _id(id)
 //     { "type": "Shelly Gen3 Plug S", ... config of this entity ... }
 //   ]
 // }
-// Nothing is written unless everything is valid. A device that failed has no MAC in the NVS,
-// the caller finds out with getMac(). The password is not copied, the owner of the JSON wipes it.
-ApDevice::ApDevice(const uint8_t id, JsonObjectConst data) : _id(id)
+// Device attributes are checked before writing
+bool ApDevice::write(JsonObjectConst data)
 {
     const char *macText = data["mac"] | "";
     const char *username = data["username"] | "";
@@ -62,7 +145,6 @@ ApDevice::ApDevice(const uint8_t id, JsonObjectConst data) : _id(id)
     const size_t entityCount = entityData.size();
 
     uint8_t mac[MAC_LEN] = {};
-    uint8_t entityTypes[UINT8_MAX] = {0};
 
     bool valid = strlen(macText) == MAC_STRING_LEN - 1 && NetworkUtils::macCharToBytes(mac, macText);
     valid = valid && strlen(username) > 0 && strlen(username) < DEVICE_USERNAME_LEN;
@@ -70,136 +152,96 @@ ApDevice::ApDevice(const uint8_t id, JsonObjectConst data) : _id(id)
     valid = valid && strlen(name) < DEVICE_NAME_LEN;
     valid = valid && deviceType != DeviceType::NONE;
     valid = valid && entityCount > 0 && entityCount <= UINT8_MAX;
-    if (valid)
-    {
-        uint8_t index = 0;
-        for (JsonVariantConst item : entityData)
-        {
-            const EntityType type = entityTypeFromString(item["type"] | "");
-            if (type == EntityType::NONE)
-            {
-                valid = false;
-                break;
-            }
-            entityTypes[index++] = static_cast<uint8_t>(type);
-        }
-    }
     if (!valid)
     {
         char msg[64] = {};
         snprintf(msg, sizeof(msg), "WiFi Device %d invalid onboarding data", _id);
         Logger::log(Logger::ErrorLevel::ERROR, msg);
-        return;
+        return false;
     }
 
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
-    bool written = false;
     {
         NvsStorage::Session session(ns, false);
-        written = NvsStorage::writeBytes(CONFIG_KEY_DEVICE_MAC, mac, sizeof(mac)) &&
-                  NvsStorage::writeString(CONFIG_KEY_DEVICE_USERNAME, username) &&
-                  NvsStorage::writeString(CONFIG_KEY_DEVICE_PASSWORD, password) &&
-                  NvsStorage::writeInt(CONFIG_KEY_DEVICE_TYPE, static_cast<int>(deviceType)) &&
-                  NvsStorage::writeInt(CONFIG_KEY_ENTITY_COUNT, static_cast<int>(entityCount)) &&
-                  NvsStorage::writeBytes(CONFIG_KEY_ENTITY_TYPES, entityTypes, entityCount);
-        if (written && strlen(name) > 0)
-            written = NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name);
-        if (!written)
-            NvsStorage::clearNamespace(); // no half written device
+        NvsStorage::writeBytes(CONFIG_KEY_DEVICE_MAC, mac, sizeof(mac));
+        NvsStorage::writeString(CONFIG_KEY_DEVICE_USERNAME, username);
+        NvsStorage::writeString(CONFIG_KEY_DEVICE_PASSWORD, password);
+        NvsStorage::writeInt(CONFIG_KEY_DEVICE_TYPE, static_cast<int>(deviceType));
+        NvsStorage::writeInt(CONFIG_KEY_ENTITY_COUNT, static_cast<int>(entityCount));
+        // entity types are written by each entity under its own prefixed keys, not here
+        if (strlen(name) > 0)
+            NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name);
     }
-    if (!written)
-    {
-        char msg[64] = {};
-        snprintf(msg, sizeof(msg), "WiFi Device %d could not be written", _id);
-        Logger::log(Logger::ErrorLevel::ERROR, msg);
-        return;
-    }
+    //mirror into RAM
+    memcpy(_mac, mac, sizeof(_mac));
+    strlcpy(_username, username, sizeof(_username));
+    strlcpy(_name, name, sizeof(_name));
+    _deviceType = deviceType;
 
     // The session is closed, the entities may open their own
     entities.reserve(entityCount);
     uint8_t index = 0;
     for (JsonVariantConst item : entityData)
     {
-        EntityBase *entity = createEntity(static_cast<EntityType>(entityTypes[index]),
-                                           index, item.as<JsonObjectConst>());
-        if (entity)
-            entities.push_back(entity);
+        EntityBase *entity = onboardEntity(item.as<JsonObjectConst>(),index);
+        if (!entity)
+            return false;
+        entities.push_back(entity);
         index++;
     }
+    return true;
 }
 
-// Destroying a device removes it from the system: entities first, the own namespace last.
+// Destroying a device removes it from the system. The entities' keys live in the device
+// namespace, so clearing it once removes the device and all its entities from the NVS.
 // Only the registry creates and deletes devices (new/delete), never a device on the stack.
 ApDevice::~ApDevice()
 {
     for (EntityBase *entity : entities)
-    {
-        if (entity)
-        {
-            entity->remove(); // clears the NVS namespace of the entity, failures are logged by NvsStorage
-            delete entity;
-        }
-    }
+        delete entity; // delete on nullptr is a no-op
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
     NvsStorage::clearNamespace();
 }
 
-// The device answered a status request: it is reachable, remember its signal strength.
+// The device answered a status request: it is reachable. MAC verification happens
+// in the NetworkWorker before this is called - by the time applyResponse() runs, the
+// caller has already confirmed this response really came from this device.
 bool ApDevice::applyResponse(JsonObjectConst data)
 {
-    uint8_t deviceMac[MAC_LEN] = {0};
-    uint8_t responseMac[MAC_LEN] = {0};
-    getMac(deviceMac, sizeof(deviceMac));
-    if (!data.containsKey("sys") || !data["sys"].containsKey("mac"))
-    {
-        return false;
-    }
-    NetworkUtils::macCharToBytes(responseMac, data["sys"]["mac"]);
-    if (memcmp(deviceMac, responseMac, sizeof(deviceMac)) != 0)
-    {
-        setOnline(false);
-        char msg[64]={0};
-        snprintf(msg,sizeof(msg),"ApDevice id:%d, type:%s lost",_id,deviceTypeToString(getDeviceType()));
-        Logger::log(Logger::ErrorLevel::WARN,msg);
-        return false;
-    }
-    _rssi = data["wifi"]["rssi"] | RSSI_UNKNOWN;
     setOnline(true);
-    for(EntityBase *entity : entities){
-        if(entity) { entity->applyResponse(data); }
+    for (EntityBase *entity : entities)
+    {
+        if (entity)
+        {
+            entity->applyResponse(data);
+        }
     }
     return true;
 }
 
-int ApDevice::getRssi() const { return _rssi; }
-
 uint8_t ApDevice::getId() const { return _id; }
 
-// The credentials are read from the NVS on demand and copied into the buffer of the caller.
-// The caller wipes the buffer after use (SecureUtils::ensureZero).
 bool ApDevice::getMac(uint8_t *buffer, size_t len) const
 {
     if (!buffer || len < MAC_LEN)
         return false;
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readBytes(CONFIG_KEY_DEVICE_MAC, buffer, MAC_LEN);
+    memcpy(buffer, _mac, MAC_LEN);
+    return true;
 }
 
 bool ApDevice::getUsername(char *buffer, size_t len) const
 {
-    if (!buffer || len < DEVICE_USERNAME_LEN)
+    if (!buffer || len < DEVICE_USERNAME_LEN || _username[0] == '\0')
         return false;
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    return NvsStorage::readString(CONFIG_KEY_DEVICE_USERNAME, buffer, len);
+    strlcpy(buffer, _username, len);
+    return true;
 }
 
+// The password is a secret: read from the NVS on demand, never kept in RAM by this class.
+// The caller wipes the buffer after use (SecureUtils::ensureZero).
 bool ApDevice::getPassword(char *buffer, size_t len) const
 {
     if (!buffer || len < DEVICE_PASSWORD_LEN)
@@ -212,13 +254,7 @@ bool ApDevice::getPassword(char *buffer, size_t len) const
 
 DeviceType ApDevice::getDeviceType() const
 {
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    int value = 0;
-    if (!NvsStorage::readInt(CONFIG_KEY_DEVICE_TYPE, value) || value < 0 || value > UINT8_MAX)
-        return DeviceType::NONE;
-    return static_cast<DeviceType>(value);
+    return _deviceType;
 }
 
 const char *ApDevice::getDeviceTypeString() const
@@ -230,15 +266,10 @@ bool ApDevice::getName(char *buffer, size_t len) const
 {
     if (!buffer || len < DEVICE_NAME_LEN)
         return false;
-    {
-        char ns[NvsStorage::NVS_KEY_LEN] = {};
-        nvsNamespace(ns, sizeof(ns));
-        NvsStorage::Session session(ns, true);
-        if (NvsStorage::readString(CONFIG_KEY_DEVICE_NAME, buffer, len))
-            return true;
-    }
-    // readString clears the buffer for a missing key, the default is not written to the NVS
-    snprintf(buffer, len, "WiFi Device %d", _id);
+    if (_name[0] != '\0')
+        strlcpy(buffer, _name, len);
+    else // no name set, the default is not written to the NVS
+        snprintf(buffer, len, "WiFi Device %d", _id);
     return true;
 }
 
@@ -249,7 +280,10 @@ bool ApDevice::setName(const char *name)
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
-    return NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name);
+    if (!NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name))
+        return false;
+    strlcpy(_name, name, sizeof(_name)); // RAM only after the NVS write succeeded
+    return true;
 }
 
 bool ApDevice::isOnline() const { return _online; }
@@ -276,37 +310,14 @@ uint8_t ApDevice::getEntityCount() const
     return static_cast<uint8_t>(entities.size());
 }
 
+EntityType ApDevice::getEntityType(const uint8_t idx) const
+{
+    EntityBase *entity = getEntity(idx);
+    return entity ? entity->getType() : EntityType::NONE;
+}
+
 // private
 void ApDevice::nvsNamespace(char *buffer, size_t len) const
 {
     snprintf(buffer, len, "apDev_%d", _id);
 }
-
-EntityBase *ApDevice::createEntity(EntityType type, uint8_t idx, JsonObjectConst data)
-{
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    snprintf(ns, sizeof(ns), "dev%d_ent%d", _id, idx);
-
-    EntityBase *entity = nullptr;
-    switch (type)
-    {
-    case EntityType::SHELLY_GEN2_RELAY: // fall through
-    case EntityType::SHELLY_GEN3_RELAY:
-    case EntityType::SHELLY_GEN3_PLUG_S:
-        if (data.isNull())
-            entity = new (std::nothrow) ShellyGen2Relay(ns, idx);
-        else
-            entity = new (std::nothrow) ShellyGen2Relay(ns, idx, data);
-        break;
-    default:
-        break;
-    }
-    if (!entity)
-    {
-        char msg[64] = {};
-        snprintf(msg, sizeof(msg), "WiFi Device %d entity %d creation failed", _id, idx);
-        Logger::log(Logger::ErrorLevel::ERROR, msg);
-    }
-    return entity;
-}
-

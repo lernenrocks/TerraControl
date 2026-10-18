@@ -1,27 +1,62 @@
 #include "ShellyGen2Relay.h"
+#include <new>
 
-ShellyGen2Relay::ShellyGen2Relay(const char *nvsNamespace, uint8_t idx)
-    : RelayBase(nvsNamespace, idx) {}
+ShellyGen2Relay *ShellyGen2Relay::recover(const char *nvsNamespace, uint8_t idx, EntityType type)
+{
+    ShellyGen2Relay *relay = new (std::nothrow) ShellyGen2Relay(nvsNamespace, idx, type);
+    if (!relay)
+        return nullptr;
+    if (!relay->load())
+    {
+        delete relay;
+        return nullptr;
+    }
+    return relay;
+}
 
-ShellyGen2Relay::ShellyGen2Relay(const char *nvsNamespace, uint8_t idx, JsonObjectConst data)
-    : RelayBase(nvsNamespace, idx, data["name"] | "") {}
+ShellyGen2Relay *ShellyGen2Relay::onboard(const char *nvsNamespace, uint8_t idx, EntityType type, JsonObjectConst data)
+{
+        ShellyGen2Relay *relay = new (std::nothrow) ShellyGen2Relay(nvsNamespace, idx, type);
+    if (!relay)
+        return nullptr;
+    if (!relay->write(data))
+    {
+        delete relay;
+        return nullptr;
+    }
+    return relay;
+}
+
 
 bool ShellyGen2Relay::buildSwitchRequest(bool on, char *buffer, size_t len)
 {
     if (len < RELAY_REQUEST_LEN)
         return false;
-    snprintf(buffer, len, "rpc/Switch.Set?id=%d&on=%s&toggle_after=%d",
-        getIndex(), on ? "true" : "false", getFailsafeSeconds());
+    if (on)
+    {
+        snprintf(buffer, len, "rpc/Switch.Set?id=%u&on=true&toggle_after=%d",
+                 RelayBase::getOutputIdx(), getFailsafeSeconds());
+    }
+    else
+    {
+        snprintf(buffer, len, "rpc/Switch.Set?id=%u&on=false",
+                 RelayBase::getOutputIdx());
+    }
+
     return true;
 }
 
 bool ShellyGen2Relay::applyResponse(JsonObjectConst data)
 {
     char key[16] = {};
-    snprintf(key, sizeof(key), "switch:%d", getIndex());
+    snprintf(key, sizeof(key), "switch:%u", getOutputIdx());
     JsonVariantConst mine = data[key];
     if (mine.isNull())
         return false; // Index passt nicht zur Antwort, keinen Zustand raten
     actualOn = mine["output"] | false;
     return true;
 }
+
+// private
+ShellyGen2Relay::ShellyGen2Relay(const char *nvsNamespace, uint8_t idx, EntityType type)
+    : RelayBase(nvsNamespace, idx, type) {}

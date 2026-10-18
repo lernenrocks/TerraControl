@@ -2,18 +2,15 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "NvsStorage.h"
+#include "SensorConfigKeys.h"
 
-constexpr const size_t SENSOR_UNIT_LEN = 16;
-constexpr const size_t SENSOR_NAME_LEN = 32;
-constexpr const float DEFAULT_SCALE = 1.0f;
-constexpr const float DEFAULT_OFFSET = 0.0f;
-constexpr const char CONFIG_KEY_SCALE[] = "scale";
-constexpr const char CONFIG_KEY_OFFSET[] = "offset";
-constexpr const char CONFIG_KEY_UNIT[] = "unit";
-constexpr const char CONFIG_KEY_PRECISION[] = "precision";
-constexpr const char CONFIG_KEY_SENSOR_NAME[] = "name";
+// Specific to SensorBase's own id/type tracking - not shared with RelaySensorBase,
+// which gets its index/type from EntityBase/the owning ApDevice instead.
 constexpr const char CONFIG_KEY_SENSOR_TYPE[] = "type";
 constexpr const char CONFIG_KEY_SENSOR_ID[] = "id";
+// NVS layout: all local sensors share one namespace, every key prefixed with the sensor id
+// ("s<id>_<key>", e.g. "s3_scale") - the number of namespaces does not grow with the sensors.
+constexpr const char SENSOR_NVS_NAMESPACE[] = "sensors";
 
 /** @brief Abstract base class for all sensors */
 class SensorBase
@@ -45,7 +42,9 @@ public:
     uint8_t getSensorId() const;
 
 protected:
-    void nvsNamespace(char *buffer, size_t len) const;
+    // Builds this sensor's prefixed key ("s<id>_<key>") into a buffer of NvsStorage::NVS_KEY_LEN.
+    // Cannot fail: every key name is checked by a static_assert (SensorConfigKeys.h).
+    void nvsKey(const char *key, char *buffer, size_t len) const;
 
 private:
     uint8_t _sensorId;

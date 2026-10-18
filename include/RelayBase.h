@@ -4,7 +4,10 @@
 #include <atomic>
 
 constexpr const int DEFAULT_FAILSAFE_TIMEOUT_SEC = 300;
-constexpr const char CONFIG_KEY_FAILSAFE_TIMEOUT[] = "failsafeSec";
+constexpr const char CONFIG_KEY_FAILSAFE_TIMEOUT[] = "failsafe";
+static_assert(sizeof(CONFIG_KEY_FAILSAFE_TIMEOUT) - 1 <= ENTITY_KEY_NAME_MAX, "entity key name too long");
+constexpr const char CONFIG_KEY_OUTPUT[] = "output";
+static_assert(sizeof(CONFIG_KEY_OUTPUT) - 1 <= ENTITY_KEY_NAME_MAX, "entity key name too long");
 
 enum class RelayMode
 {
@@ -18,12 +21,10 @@ enum class RelayMode
 // state (actualOn) on top of the generic EntityBase, so the Controller can reach any
 // relay type through a RelayBase* without knowing the concrete manufacturer class.
 // desiredOn/mode/actualOn live only in RAM and reset to AUTO/false on every boot -
-// nothing switches back on automatically after a restart. Only the failsafe persists.
+// nothing switches back on automatically after a restart.
 class RelayBase : public EntityBase
 {
 public:
-    RelayBase(const char *nvsNamespace, uint8_t idx);
-    RelayBase(const char *nvsNamespace, uint8_t idx, const char *name);
     virtual ~RelayBase() = default;
 
     virtual bool buildSwitchRequest(bool on, char *buffer, size_t len) = 0;
@@ -38,7 +39,12 @@ public:
     int getFailsafeSeconds() const;
     bool setFailsafeSeconds(int seconds);
 
+    uint8_t getOutputIdx() const;
+
 protected:
+    RelayBase(const char *nvsNamespace, uint8_t idx, EntityType type);
+    bool load() override;
+    bool write(JsonObjectConst data) override;
     std::atomic<bool> actualOn{false}; // set by the concrete class's applyResponse()
 
 private:
@@ -46,4 +52,5 @@ private:
     std::atomic<bool> _desiredOn{false};
     std::atomic<RelayMode> _mode{RelayMode::AUTO};
     std::atomic<int> _failsafeSeconds{DEFAULT_FAILSAFE_TIMEOUT_SEC};
+    uint8_t _outputIdx=0;
 };
