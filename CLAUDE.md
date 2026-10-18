@@ -95,7 +95,7 @@ Veraltet: `WiFiManager::switchRelay()`/`updateRelayStatus()` sind bereits aus `W
   - `AUTO`: Schaltlogik entscheidet anhand Sensorwerten
   - `FORCED_ON` / `FORCED_OFF`: überschreibt Schaltlogik; Controller ignoriert Sensorwerte für dieses Relay
 - **`bool broken`** (Flag in `RelayBase`, kommt im Watchdog-Sprint, noch nicht gebaut): gesetzt vom Watchdog bei anhaltendem Mismatch; Controller überspringt das Relay und loggt `[WARN]`; orthogonal zum RelayMode — der vorherige Mode bleibt erhalten; User muss manuell quittieren (GUI/API)
-- **Relay ON** (aktiv gehalten): `SWITCH_ON` + inline `getStatus` werden alle halbe Intervallzeit wiederholt — korrigiert unerwartetes Abfallen automatisch
+- **Relay ON** (aktiv gehalten): `SWITCH_ON` + inline `getStatus` werden alle halbe Intervallzeit wiederholt — korrigiert unerwartetes Abfallen automatisch. **Ausnahme**: bei ungültigem Sensorwert der zugehörigen Regel keine Wiederholung, damit der Failsafe ausläuft (siehe „Schaltlogik" unten)
 - **Relay OFF**: `SWITCH_OFF` + inline `getStatus`; wenn bestätigt → nur noch periodisches `GET_STATUS`; wenn nicht bestätigt → 2 Wiederholungen (~3s Pause) → bei anhaltendem Mismatch zwischen `desiredOn` und `actualOn` (beide in `RelayBase`): `broken = true`
 
 ### FreeRTOS
@@ -275,7 +275,8 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 - `threshold` ist immer der sicherheitskritische Schaltpunkt — `hysteresis` verschiebt nur die unkritische Gegenseite
 - `activeAbove = true`: Relay ON wenn `value > threshold`, OFF wenn `value < threshold - hysteresis`
 - `activeAbove = false`: Relay ON wenn `value < threshold`, OFF wenn `value > threshold + hysteresis`
-- **Sicherheitsregel: Schaltlogik prüft `sensor.online` bevor sie schaltet — kein Schalten bei ungültigem Sensorwert.** Hintergrund: Ein ausgefallener Bodenfeuchtesensor darf nicht dauerhaft die Beregnungsanlage aktivieren. Relay bleibt im letzten validen Zustand bis `online` wieder `true`.
+- **Sicherheitsregel: Schaltlogik prüft `sensor.online` bevor sie schaltet — kein Schalten bei ungültigem Sensorwert.** Hintergrund: Ein ausgefallener Bodenfeuchtesensor darf nicht dauerhaft die Beregnungsanlage aktivieren.
+- **Verhalten bei ungültigem Sensorwert (präzisiert 2026-10-18, noch nicht umgesetzt — Schaltregel-Sprint)**: kein sofortiges Abschalten, aber auch kein Weiterhalten — der Controller schaltet nicht um **und verlängert den Failsafe nicht mehr** (keine `SWITCH_ON`-Wiederholung, solange der Sensor ungültig ist). Ein kurzer „Schluckauf" wird so vom laufenden Failsafe überbrückt: kommen innerhalb dieser Zeit wieder gültige Werte, läuft die Regel normal weiter. Bleibt der Sensor ungültig, fällt das Relais über den Failsafe (`toggle_after`) von selbst ab, und der User bekommt eine Mitteilung (Watchdog/Notification). Ersetzt die frühere Formulierung „Relay bleibt im letzten validen Zustand, bis `online` wieder `true`" — die hätte bei laufender Heizung und ausgefallenem Sensor den Failsafe endlos verlängert
 
 ### Config-Persistenz
 - **NVS ist der primäre Config-Store** — einzige Wahrheitsquelle für alle Settings
