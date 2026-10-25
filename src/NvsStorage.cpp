@@ -36,10 +36,7 @@ namespace NvsStorage
 {
     Session::Session(const char *pref_namespace, bool readOnly)
     {
-        if (!begin(pref_namespace, readOnly))
-        {
-            Logger::log(Logger::ErrorLevel::WARN, "could not open nvs!");
-        }
+        begin(pref_namespace, readOnly);
     }
     Session::~Session()
     {
@@ -172,6 +169,13 @@ namespace NvsStorage
         }
         preferences.getBytes(key, value, len);
         return true;
+    }
+    size_t getFreeEntries(){
+        //One page for 126 entries is always kept empty for nvs garbage collection
+        nvs_stats_t stats={};
+        if(nvs_get_stats(nullptr,&stats)!= ESP_OK)
+            return 0;
+        return stats.free_entries > 126 ? stats.free_entries - 126 : 0;
     }
 
 }

@@ -32,6 +32,8 @@ namespace NvsStorage
     bool readInt(const char *key, int &value);
     bool readBytes(const char *key, void *value, size_t len);
 
+    size_t getFreeEntries();
+
     class Session
     {
     public:

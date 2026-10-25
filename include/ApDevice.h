@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <atomic>
-#include <mutex>
 #include "NvsStorage.h"
 #include "NetworkUtils.h"
 #include <vector>
@@ -26,11 +25,11 @@ class ApDevice
 {
 public:
     
-    ~ApDevice(); // removes the device and its entities from the NVS and frees them
-    // a copy would share the entity pointers - both destructors would delete them and wipe the NVS twice
+    ~ApDevice(); // frees the object and its entities, NVS stays untouched
+    // a copy would share the entity pointers - both destructors would delete them
     ApDevice(const ApDevice &) = delete;
     ApDevice &operator=(const ApDevice &) = delete;
-
+    void erase();
     static ApDevice *recover(uint8_t id);
     static ApDevice *onboard(uint8_t id, JsonObjectConst data);
 
@@ -46,16 +45,21 @@ public:
     bool isOnline() const;
     void setOnline(bool online);
     unsigned long getLastSeen() const;
+    // The vector position always equals the NVS entity index (e<idx>_): an entity that could
+    // not be loaded keeps its position as nullptr instead of letting the following ones shift.
+    // getEntity() may therefore return nullptr for idx < getEntityCount() - the caller must
+    // treat that like a missing entity (rule invalid), never fall back to another index.
     EntityBase *getEntity(const uint8_t idx) const;
-    uint8_t getEntityCount() const;
+    uint8_t getEntityCount() const; // number of positions, including entities that failed to load
     // Forwards to the entity's own EntityBase::getType() - the type lives only there now
     // (RAM-only, set once at construction), no separate copy kept on ApDevice.
     EntityType getEntityType(const uint8_t idx) const;
+    static bool hasData(uint8_t id);
 
 private:
     explicit ApDevice(const uint8_t id);
     std::vector<EntityBase *> entities;
-    void nvsNamespace(char *buffer, size_t len) const;
+    static void nvsNamespace(uint8_t id, char *buffer, size_t len);
     const uint8_t _id;
     // NVS values mirrored in RAM - loaded once, NVS only touched again by setters.
     // Not atomic: access is protected by ApDeviceRegistry::Lock. The password is a secret

@@ -27,16 +27,16 @@ ApDevice *ApDevice::onboard(uint8_t id, JsonObjectConst data)
         return nullptr;
     if (!device->write(data))
     {
+        device->erase();
         delete device;
         return nullptr;
     }
     return device;
 }
-
 bool ApDevice::load()
 {
     char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
+    nvsNamespace(_id, ns, sizeof(ns));
     uint8_t entityCount = 0;
     {
         NvsStorage::Session session(ns, true);
@@ -85,10 +85,12 @@ bool ApDevice::load()
         if (!entity)
         {
             char msg[64] = {};
-            snprintf(msg, sizeof(msg), "WiFi Decive %d entity %d could not be loaded", _id, i);
+            snprintf(msg, sizeof(msg), "WiFi Device %d entity %d could not be loaded", _id, i);
             Logger::log(Logger::ErrorLevel::ERROR, msg);
-            continue;
         }
+        // nullptr is pushed on purpose: skipping it would shift every following entity one
+        // position down, and a rule would silently read/switch the wrong one. Its NVS keys stay
+        // untouched, so a firmware that knows the type loads it again at the same position.
         entities.push_back(entity);
     }
     return true;
@@ -96,7 +98,7 @@ bool ApDevice::load()
 EntityBase *ApDevice::recoverEntity(EntityType type, uint8_t idx)
 {
     char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
+    nvsNamespace(_id, ns, sizeof(ns));
     switch (type)
     {
     case EntityType::SHELLY_GEN2_RELAY: // fall through
@@ -111,7 +113,7 @@ EntityBase *ApDevice::onboardEntity(JsonObjectConst data, uint8_t idx)
 {
     EntityType type = entityTypeFromString(data["type"] | "");
     char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
+    nvsNamespace(_id, ns, sizeof(ns));
     switch (type)
     {
     case EntityType::SHELLY_GEN2_RELAY: // fall through
@@ -161,7 +163,7 @@ bool ApDevice::write(JsonObjectConst data)
     }
 
     char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
+    nvsNamespace(_id, ns, sizeof(ns));
     {
         NvsStorage::Session session(ns, false);
         NvsStorage::writeBytes(CONFIG_KEY_DEVICE_MAC, mac, sizeof(mac));
@@ -173,7 +175,7 @@ bool ApDevice::write(JsonObjectConst data)
         if (strlen(name) > 0)
             NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name);
     }
-    //mirror into RAM
+    // mirror into RAM
     memcpy(_mac, mac, sizeof(_mac));
     strlcpy(_username, username, sizeof(_username));
     strlcpy(_name, name, sizeof(_name));
@@ -184,7 +186,7 @@ bool ApDevice::write(JsonObjectConst data)
     uint8_t index = 0;
     for (JsonVariantConst item : entityData)
     {
-        EntityBase *entity = onboardEntity(item.as<JsonObjectConst>(),index);
+        EntityBase *entity = onboardEntity(item.as<JsonObjectConst>(), index);
         if (!entity)
             return false;
         entities.push_back(entity);
@@ -192,16 +194,15 @@ bool ApDevice::write(JsonObjectConst data)
     }
     return true;
 }
-
-// Destroying a device removes it from the system. The entities' keys live in the device
-// namespace, so clearing it once removes the device and all its entities from the NVS.
-// Only the registry creates and deletes devices (new/delete), never a device on the stack.
 ApDevice::~ApDevice()
 {
     for (EntityBase *entity : entities)
         delete entity; // delete on nullptr is a no-op
+}
+void ApDevice::erase()
+{
     char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
+    nvsNamespace(_id, ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
     NvsStorage::clearNamespace();
 }
@@ -247,7 +248,7 @@ bool ApDevice::getPassword(char *buffer, size_t len) const
     if (!buffer || len < DEVICE_PASSWORD_LEN)
         return false;
     char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
+    nvsNamespace(_id, ns, sizeof(ns));
     NvsStorage::Session session(ns, true);
     return NvsStorage::readString(CONFIG_KEY_DEVICE_PASSWORD, buffer, len);
 }
@@ -278,7 +279,7 @@ bool ApDevice::setName(const char *name)
     if (!name || strlen(name) >= DEVICE_NAME_LEN)
         return false;
     char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
+    nvsNamespace(_id, ns, sizeof(ns));
     NvsStorage::Session session(ns, false);
     if (!NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name))
         return false;
@@ -297,7 +298,7 @@ void ApDevice::setOnline(bool online)
 
 unsigned long ApDevice::getLastSeen() const { return _lastSeen; }
 
-// The entities are created in the constructor and never change afterwards, reading needs no lock.
+// The entities are created in the load() or onboard() and never change afterwards.
 EntityBase *ApDevice::getEntity(const uint8_t idx) const
 {
     if (idx >= entities.size())
@@ -315,9 +316,16 @@ EntityType ApDevice::getEntityType(const uint8_t idx) const
     EntityBase *entity = getEntity(idx);
     return entity ? entity->getType() : EntityType::NONE;
 }
+bool ApDevice::hasData(uint8_t id)
+{
+    char ns[NvsStorage::NVS_KEY_LEN] = {};
+    nvsNamespace(id, ns, sizeof(ns));
+    NvsStorage::Session session(ns,true);
+    return NvsStorage::hasKey(CONFIG_KEY_DEVICE_TYPE);
+}
 
 // private
-void ApDevice::nvsNamespace(char *buffer, size_t len) const
+void ApDevice::nvsNamespace(uint8_t id, char *buffer, size_t len)
 {
-    snprintf(buffer, len, "apDev_%d", _id);
+    snprintf(buffer, len, "apDev_%d", id);
 }
