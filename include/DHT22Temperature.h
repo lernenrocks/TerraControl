@@ -21,6 +21,6 @@ private:
     float lastValue = NAN;
     static constexpr const char *defaultUnit = "°C";
     static constexpr int defaultPrecision = 1;
-
     bool readRaw(float &buffer) override;
+    bool valid=false;
 };

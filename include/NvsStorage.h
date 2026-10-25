@@ -1,12 +1,6 @@
 #pragma once
 #include <Arduino.h>
 
-namespace
-{
-    bool begin(const char *pref_namespace, bool readOnly);
-    void end();
-
-}
 
 namespace NvsStorage
 {

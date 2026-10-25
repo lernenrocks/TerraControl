@@ -47,5 +47,7 @@ bool DHT22Humidity::readRaw(float &buffer)
         lastReadTime = now;
     }
     buffer = lastValue;
+    if (lastValue == 0.0f)
+        return false;
     return !isnan(lastValue);
 }

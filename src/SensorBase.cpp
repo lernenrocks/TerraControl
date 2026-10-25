@@ -10,6 +10,7 @@ bool SensorBase::read(float &value, bool raw)
 {
     if (!readRaw(value))
         return false;
+    _lastValid=millis();
     if (!raw)
     {
         value = value * getScale() + getOffset();
@@ -111,6 +112,9 @@ bool SensorBase::setUnit(const char *unit)
     return true;
 }
 
+unsigned long SensorBase::getLastValid()const{
+    return _lastValid;
+} 
 
 void SensorBase::nvsKey(const char *key, char *buffer, size_t len) const
 {

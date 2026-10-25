@@ -51,9 +51,12 @@ bool ShellyGen2Relay::applyResponse(JsonObjectConst data)
     char key[16] = {};
     snprintf(key, sizeof(key), "switch:%u", getOutputIdx());
     JsonVariantConst mine = data[key];
+    JsonVariantConst output = mine["output"];
     if (mine.isNull())
         return false; // Index passt nicht zur Antwort, keinen Zustand raten
-    actualOn = mine["output"] | false;
+    if(!output.is<bool>())
+        return false;
+    actualOn = output.as<bool>();
     return true;
 }
 

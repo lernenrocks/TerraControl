@@ -270,6 +270,9 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 - **Digest Auth (SHA-256) auch für den C3**: jede eingehende Anfrage an den C3 (inkl. `GET /sensors`/`GET /status`) verlangt gültige Digest-Auth-Credentials, geprüft global vor dem Routing — bestätigt im echten RemoteSensor-Projekt (`HttpServer.cpp`, `DigestAuth::verify()` vor jedem Handler); Realm wird aus der Geräte-MAC abgeleitet. Die MainUnit muss den C3 also genau wie einen Shelly per Digest Auth ansprechen, nicht mit einem unauthentifizierten GET (2026-09-13)
 - **Auth-Verfahren muss hier von Anfang an pro Sensor-Typ abstrahiert sein (2026-09-14, bewusster Unterschied zur Relay-Entscheidung oben)**: anders als bei Shelly gibt es hier schon heute einen konkreten, absehbaren Anwendungsfall mit komplett anderem Verfahren — kommerzielle Cloud-Sensoren wie Netatmo laufen über deren Cloud-API mit OAuth2 (Internet/STA, TLS), nicht über lokales Digest Auth am Soft-AP wie die eigenen C3-Knoten. Wenn `SensorManager`/`RemoteSensorProxy` gebaut wird (Roadmap Schritt 3), muss das Auth-/Request-Verfahren pro Sensor-Typ virtuell/austauschbar sein, nicht fest verdrahtet wie aktuell bei `DigestAuth::digestAuthRequest()` für Relays. Noch nicht umgesetzt, nur als Vorgabe für den Sensor-Sprint festgehalten
 - **Antwortformat** `GET /sensors`: `{"sensor:0": {"value": 58500}, "sensor:1": {"value": 217}}` — Rohwerte; Kalibrierung und Einheit liegen im MainUnit
+- **Für die C3-Überarbeitung (2026-10-25, noch nicht umgesetzt)**:
+  - **Gültigkeit pro Wert in `/sensors`**: Fehlerbilder mit formal gültigem, aber falschem Wert (z.B. DHT22 ohne Versorgung → Nullbyte-Telegramm, Feuchte exakt 0,0) erkennt nur die Sensorklasse auf dem C3 — die MainUnit sieht nur den gerundeten Wert, nicht den Rohdatensatz. Der C3 muss „ungültig“ pro Wert mitliefern; Prüfung in der jeweiligen Sensorklasse (wie auf der MainUnit in `readRaw()`), nicht zentral
+  - **Typ pro Wert in `/sensors`** (2026-10-24): fängt Umkonfiguration oder Firmware-Update am C3 ab — die MainUnit vergleicht mit dem erwarteten Typ der Entity, Abweichung → Entity ungültig (siehe „Referenz-Stabilität“)
 - **Antwortformat** `GET /status`: `{"mac": "AA:BB:CC:DD:EE:FF", "uptime": 3600, "rssi": -65}` — MAC ist persistenter Identifier, zwingend für Onboarding
 - C3 betreibt **Light Sleep** zwischen Abfragen: WiFi-Assoziation bleibt aktiv, eingehende TCP-Verbindung weckt den C3 sofort; spart Strom auch bei kabelgebundener Versorgung
 - C3 sitzt **außerhalb** des Terrariums; Sensorkabel wird durch die Terrariumwand geführt; kabelgebundene Stromversorgung
@@ -315,6 +318,7 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 - **Companion-App triggert OTA** — REST-Endpoint auf MainUnit; MainUnit lädt Firmware vom NAS (via STA), aktualisiert sich selbst und serviert C3-Firmware lokal über den AP; C3-Nodes pullen und updaten sich selbst
 - ESP32-Standard-Partition-Scheme ist OTA-fähig (zwei App-Slots) — gilt für MainUnit und C3; kein physisches Reflashen nötig für zukünftige Updates
 - Voraussetzung: REST-API-Layer (ApiWorker) und NOR-Flash (Firmware-Storage) müssen stehen
+- **Firmware der Shellys** (2026-10-25, noch nicht durchdacht): am isolierten AP ohne Internet gibt es keine Shelly-Updates — Antwortstruktur ändert sich also nicht unbemerkt. Ein Update müsste die MainUnit durchreichen; zu gegebener Zeit bedenken
 
 ### Datenbank
 - InfluxDB für Zeitreihendaten, CouchDB/SQLite+REST für Konfiguration

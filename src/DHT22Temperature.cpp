@@ -3,6 +3,7 @@
 namespace
 {
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 2000ul;
+    
 }
 
 DHT22Temperature::DHT22Temperature(DHT *dht, uint8_t sensorId)
@@ -45,7 +46,8 @@ bool DHT22Temperature::readRaw(float &buffer)
     {
         lastValue = dht->readTemperature();
         lastReadTime = now;
+        valid = !isnan(lastValue) && dht->readHumidity()!=0.0f;
     }
     buffer = lastValue;
-    return !isnan(lastValue);
+    return valid;
 }

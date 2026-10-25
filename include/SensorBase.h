@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include "NvsStorage.h"
 #include "SensorConfigKeys.h"
+#include <atomic>
 
 // Specific to SensorBase's own id/type tracking - not shared with RelaySensorBase,
 // which gets its index/type from EntityBase/the owning ApDevice instead.
@@ -41,6 +42,8 @@ public:
     const char *getType() const;
     uint8_t getSensorId() const;
 
+    unsigned long getLastValid() const;
+
 protected:
     // Builds this sensor's prefixed key ("s<id>_<key>") into a buffer of NvsStorage::NVS_KEY_LEN.
     // Cannot fail: every key name is checked by a static_assert (SensorConfigKeys.h).
@@ -54,6 +57,8 @@ private:
     float _offset = DEFAULT_OFFSET;
     int _precision = 0;
     char _unit[SENSOR_UNIT_LEN] = {};
+    std::atomic<unsigned long> _lastValid=0ul;
     virtual bool readRaw(float &buffer) = 0;
     void ensureDefaults(int defaultPrecision, const char *defaultUnit);
+
 };

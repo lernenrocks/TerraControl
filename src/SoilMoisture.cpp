@@ -1,8 +1,10 @@
 #include "SoilMoisture.h"
+#include "Logger.h"
 
 namespace
 {
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 500ul;
+    constexpr const long MINIMAL_DIFFERENCE_WET_DRY = 500l;
 }
 SoilMoisture::SoilMoisture(uint8_t pin, uint8_t sensorId)
     : SensorBase(sensorId, "Soil Moisture", defaultPrecision, defaultUnit), pin(pin)
@@ -16,9 +18,13 @@ SoilMoisture::SoilMoisture(uint8_t pin, uint8_t sensorId)
     float calDry = 0.0f, calWet = 0.0f;
     if (NvsStorage::readFloat(dryKey, calDry) && NvsStorage::readFloat(wetKey, calWet))
     {
-        _calDry = calDry;
-        _calWet = calWet;
-        _calibrated = true;
+
+        if (fabs(calDry - calWet) >= MINIMAL_DIFFERENCE_WET_DRY)
+        {
+            _calDry = calDry;
+            _calWet = calWet;
+            _calibrated = true;
+        }
     }
 }
 
@@ -52,12 +58,22 @@ bool SoilMoisture::getCalibrationValuesJson(char *buffer, size_t len)
 }
 bool SoilMoisture::calibrateSensorHardware(JsonObjectConst data)
 {
-    if (data[CALIBRATE_KEY_DRY].isNull() || data[CALIBRATE_KEY_WET].isNull())
+    if (!data[CALIBRATE_KEY_DRY].is<float>() || !data[CALIBRATE_KEY_WET].is<float>())
     {
+        char msg[128] = {};
+        snprintf(msg, sizeof(msg), "Calibration Error Sensor %s", getName());
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
         return false;
     }
     float calDry = data[CALIBRATE_KEY_DRY];
     float calWet = data[CALIBRATE_KEY_WET];
+    if (fabs(calWet - calDry) < MINIMAL_DIFFERENCE_WET_DRY)
+    {
+        char msg[128] = {};
+        snprintf(msg, sizeof(msg), "Sensor %s Difference between calibration values too low", getName());
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
+        return false;
+    }
     char dryKey[NvsStorage::NVS_KEY_LEN] = {};
     char wetKey[NvsStorage::NVS_KEY_LEN] = {};
     nvsKey(CALIBRATE_KEY_DRY, dryKey, sizeof(dryKey));
