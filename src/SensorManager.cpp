@@ -11,7 +11,7 @@ namespace
 {
     std::vector<SensorBase *> sensors;
     DHT dht[MAX_DHT_22] = {DHT(DHTPIN_0, DHT22), DHT(DHTPIN_1, DHT22), DHT(DHTPIN_2, DHT22), DHT(DHTPIN_3, DHT22)};
-    uint8_t sensorCount = 0;
+    uint8_t nextSensorId = 0;
     SensorBase *find(const uint8_t sensorId)
     {
         for (SensorBase *s : sensors)
@@ -33,7 +33,7 @@ namespace SensorManager
         for (size_t i = 0; i < MAX_DHT_22; i++)
         {
             dht[i].begin();
-            DHT22Temperature *dhtT = new (std::nothrow) DHT22Temperature(&dht[i], sensorCount);
+            DHT22Temperature *dhtT = new (std::nothrow) DHT22Temperature(&dht[i], nextSensorId);
             if (!dhtT)
             {
                 char msg[64];
@@ -44,9 +44,9 @@ namespace SensorManager
             else
             {
                 sensors.push_back(dhtT);
-                sensorCount++;
             }
-            DHT22Humidity *dhtH = new (std::nothrow) DHT22Humidity(&dht[i], sensorCount);
+            nextSensorId++;
+            DHT22Humidity *dhtH = new (std::nothrow) DHT22Humidity(&dht[i], nextSensorId);
             if (!dhtH)
             {
                 char msg[64];
@@ -57,10 +57,10 @@ namespace SensorManager
             else
             {
                 sensors.push_back(dhtH);
-                sensorCount++;
             }
+            nextSensorId++;
         }
-        SoilMoisture *soilM = new (std::nothrow) SoilMoisture(ANALOG_IN_0, sensorCount);
+        SoilMoisture *soilM = new (std::nothrow) SoilMoisture(ANALOG_IN_0, nextSensorId);
         if (!soilM)
         {
             char msg[64];
@@ -71,8 +71,9 @@ namespace SensorManager
         else
         {
             sensors.push_back(soilM);
-            sensorCount++;
+            
         }
+        nextSensorId++;
         return success;
     }
     bool readSensor(float &value, bool raw, uint8_t sensorId)
