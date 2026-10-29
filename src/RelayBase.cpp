@@ -18,6 +18,7 @@ bool RelayBase::load()
     }
     _outputIdx = static_cast<uint8_t>(value);
     loadFailsafe();
+    loadMode();
     return true;
 }
 bool RelayBase::write(JsonObjectConst data)
@@ -43,13 +44,24 @@ bool RelayBase::getDesiredOn() const { return _desiredOn; }
 void RelayBase::setDesiredOn(bool on) { _desiredOn = on; }
 
 RelayMode RelayBase::getMode() const { return _mode; }
-void RelayBase::setMode(RelayMode mode) { _mode = mode; }
-uint8_t RelayBase::getOutputIdx() const { return _outputIdx;}
+bool RelayBase::setMode(RelayMode mode)
+{
+    char key[NvsStorage::NVS_KEY_LEN] = {};
+    nvsKey(CONFIG_KEY_RELAY_MODE, key, sizeof(key));
+    NvsStorage::Session session(EntityBase::nvsNamespace(), false);
+    if(!NvsStorage::writeInt(key, static_cast<int>(mode)))
+        return false;
+    _mode = mode;
+    return true;
+}
+uint8_t RelayBase::getOutputIdx() const { return _outputIdx; }
 int RelayBase::getFailsafeSeconds() const { return _failsafeSeconds; }
 bool RelayBase::setFailsafeSeconds(int seconds)
 {
-    if (seconds <= 0) // 0 would disable the failsafe, negative is meaningless - no upper limit, the use case decides
+    if (seconds <MIN_FAILSAFE_SEC)
+    { 
         return false;
+    }
     char key[NvsStorage::NVS_KEY_LEN] = {};
     nvsKey(CONFIG_KEY_FAILSAFE_TIMEOUT, key, sizeof(key));
     NvsStorage::Session session(EntityBase::nvsNamespace(), false);
@@ -70,4 +82,28 @@ void RelayBase::loadFailsafe()
     {
         _failsafeSeconds = seconds;
     }
+}
+void RelayBase::loadMode()
+{
+    int savedMode=0;
+    char key[NvsStorage::NVS_KEY_LEN]={};
+    nvsKey(CONFIG_KEY_RELAY_MODE,key,sizeof(key));
+    {
+    NvsStorage::Session session(EntityBase::nvsNamespace(), true);
+    NvsStorage::readInt(key,savedMode);
+    }
+    RelayMode desiredMode = static_cast<RelayMode>(savedMode);
+    bool found =false;
+    switch (desiredMode)
+    {
+        case RelayMode::AUTO:
+        case RelayMode::FORCED_OFF:
+        case RelayMode::FORCED_ON:
+        found=true;
+        break;
+    }
+    if(found){
+        _mode=desiredMode;
+    }
+
 }
