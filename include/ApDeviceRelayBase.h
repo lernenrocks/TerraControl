@@ -27,13 +27,13 @@ enum class RelayMode
 // Base for every switchable entity (relay output), regardless of manufacturer.
 // Adds the Controller's decision surface (desiredOn, mode) and the confirmed device
 // state (actualOn) on top of the generic EntityBase, so the Controller can reach any
-// relay type through a RelayBase* without knowing the concrete manufacturer class.
+// relay type through an ApDeviceRelayBase* without knowing the concrete manufacturer class.
 // desiredOn/actualOn live only in RAM and reset to false on every boot. The mode is
 // stored in the NVS, so a FORCED_ON set by the user survives a restart.
-class RelayBase : public EntityBase
+class ApDeviceRelayBase : public EntityBase
 {
 public:
-    virtual ~RelayBase() = default;
+    virtual ~ApDeviceRelayBase() = default;
 
     virtual bool buildSwitchRequest(bool on, char *buffer, size_t len) = 0;
 
@@ -50,7 +50,7 @@ public:
     uint8_t getOutputIdx() const;
 
 protected:
-    RelayBase(const char *nvsNamespace, uint8_t idx, EntityType type);
+    ApDeviceRelayBase(const char *nvsNamespace, uint8_t idx, EntityType type);
     bool load() override;
     bool write(JsonObjectConst data) override;
     std::atomic<bool> actualOn{false}; // set by the concrete class's applyResponse()

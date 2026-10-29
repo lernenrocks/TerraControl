@@ -1,13 +1,13 @@
 #pragma once
 
-#include "RelayBase.h"
+#include "ApDeviceRelayBase.h"
 #include "EntityType.h"
 #include "Arduino.h"
 #include "ArduinoJson.h"
 
 constexpr const size_t RELAY_REQUEST_LEN = 256;
 
-class ShellyGen2Relay : public RelayBase
+class ShellyGen2Relay : public ApDeviceRelayBase
 {
 public:
     ~ShellyGen2Relay() = default;

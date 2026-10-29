@@ -1,10 +1,10 @@
-#include "RelayBase.h"
+#include "ApDeviceRelayBase.h"
 #include "NvsStorage.h"
 #include <Arduino.h>
 // public
-RelayBase::RelayBase(const char *nvsNamespace, uint8_t idx, EntityType type) : EntityBase(nvsNamespace, idx, type) {}
+ApDeviceRelayBase::ApDeviceRelayBase(const char *nvsNamespace, uint8_t idx, EntityType type) : EntityBase(nvsNamespace, idx, type) {}
 
-bool RelayBase::load()
+bool ApDeviceRelayBase::load()
 {
     if (!EntityBase::load())
         return false;
@@ -21,7 +21,7 @@ bool RelayBase::load()
     loadMode();
     return true;
 }
-bool RelayBase::write(JsonObjectConst data)
+bool ApDeviceRelayBase::write(JsonObjectConst data)
 {
     if (!data["output"].is<uint8_t>())
         return false;
@@ -39,12 +39,12 @@ bool RelayBase::write(JsonObjectConst data)
     return true;
 }
 
-bool RelayBase::getActualOn() const { return actualOn; }
-bool RelayBase::getDesiredOn() const { return _desiredOn; }
-void RelayBase::setDesiredOn(bool on) { _desiredOn = on; }
+bool ApDeviceRelayBase::getActualOn() const { return actualOn; }
+bool ApDeviceRelayBase::getDesiredOn() const { return _desiredOn; }
+void ApDeviceRelayBase::setDesiredOn(bool on) { _desiredOn = on; }
 
-RelayMode RelayBase::getMode() const { return _mode; }
-bool RelayBase::setMode(RelayMode mode)
+RelayMode ApDeviceRelayBase::getMode() const { return _mode; }
+bool ApDeviceRelayBase::setMode(RelayMode mode)
 {
     char key[NvsStorage::NVS_KEY_LEN] = {};
     nvsKey(CONFIG_KEY_RELAY_MODE, key, sizeof(key));
@@ -54,9 +54,9 @@ bool RelayBase::setMode(RelayMode mode)
     _mode = mode;
     return true;
 }
-uint8_t RelayBase::getOutputIdx() const { return _outputIdx; }
-int RelayBase::getFailsafeSeconds() const { return _failsafeSeconds; }
-bool RelayBase::setFailsafeSeconds(int seconds)
+uint8_t ApDeviceRelayBase::getOutputIdx() const { return _outputIdx; }
+int ApDeviceRelayBase::getFailsafeSeconds() const { return _failsafeSeconds; }
+bool ApDeviceRelayBase::setFailsafeSeconds(int seconds)
 {
     if (seconds <MIN_FAILSAFE_SEC)
     { 
@@ -71,7 +71,7 @@ bool RelayBase::setFailsafeSeconds(int seconds)
     return true;
 }
 // private
-void RelayBase::loadFailsafe()
+void ApDeviceRelayBase::loadFailsafe()
 {
     _failsafeSeconds = DEFAULT_FAILSAFE_TIMEOUT_SEC;
     char key[NvsStorage::NVS_KEY_LEN] = {};
@@ -83,7 +83,7 @@ void RelayBase::loadFailsafe()
         _failsafeSeconds = seconds;
     }
 }
-void RelayBase::loadMode()
+void ApDeviceRelayBase::loadMode()
 {
     int savedMode=0;
     char key[NvsStorage::NVS_KEY_LEN]={};

@@ -35,12 +35,12 @@ bool ShellyGen2Relay::buildSwitchRequest(bool on, char *buffer, size_t len)
     if (on)
     {
         snprintf(buffer, len, "rpc/Switch.Set?id=%u&on=true&toggle_after=%d",
-                 RelayBase::getOutputIdx(), getFailsafeSeconds());
+                 ApDeviceRelayBase::getOutputIdx(), getFailsafeSeconds());
     }
     else
     {
         snprintf(buffer, len, "rpc/Switch.Set?id=%u&on=false",
-                 RelayBase::getOutputIdx());
+                 ApDeviceRelayBase::getOutputIdx());
     }
 
     return true;
@@ -62,4 +62,4 @@ bool ShellyGen2Relay::applyResponse(JsonObjectConst data)
 
 // private
 ShellyGen2Relay::ShellyGen2Relay(const char *nvsNamespace, uint8_t idx, EntityType type)
-    : RelayBase(nvsNamespace, idx, type) {}
+    : ApDeviceRelayBase(nvsNamespace, idx, type) {}
