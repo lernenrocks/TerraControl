@@ -1,4 +1,5 @@
 #include "ApDevice.h"
+#include "ApDeviceSensor.h"
 #include "SecureUtils.h"
 #include "NvsStorage.h"
 #include <Arduino.h>
@@ -105,6 +106,12 @@ EntityBase *ApDevice::recoverEntity(EntityType type, uint8_t idx)
     case EntityType::SHELLY_GEN3_RELAY:
     case EntityType::SHELLY_GEN3_PLUG_S:
         return ShellyGen2Relay::recover(ns, idx, type);
+    case EntityType::POWER:
+    case EntityType::ENERGY:
+    case EntityType::TEMPERATURE:
+    case EntityType::UPTIME:
+    case EntityType::RSSI:
+        return ApDeviceSensor::recover(ns, idx, type);
     default:
         return nullptr;
     }
@@ -120,6 +127,12 @@ EntityBase *ApDevice::onboardEntity(JsonObjectConst data, uint8_t idx)
     case EntityType::SHELLY_GEN3_RELAY:
     case EntityType::SHELLY_GEN3_PLUG_S:
         return ShellyGen2Relay::onboard(ns, idx, type, data);
+    case EntityType::POWER:
+    case EntityType::ENERGY:
+    case EntityType::TEMPERATURE:
+    case EntityType::UPTIME:
+    case EntityType::RSSI:
+        return ApDeviceSensor::onboard(ns, idx, type, data);
     default:
         return nullptr;
     }
@@ -320,7 +333,7 @@ bool ApDevice::hasData(uint8_t id)
 {
     char ns[NvsStorage::NVS_KEY_LEN] = {};
     nvsNamespace(id, ns, sizeof(ns));
-    NvsStorage::Session session(ns,true);
+    NvsStorage::Session session(ns, true);
     return NvsStorage::hasKey(CONFIG_KEY_DEVICE_TYPE);
 }
 

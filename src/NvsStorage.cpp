@@ -28,7 +28,7 @@ namespace
     {
         char msg[64] = {};
         snprintf(msg, sizeof(msg), "nvs write failed: %s/%s", currentNamespace, key);
-        Logger::log(Logger::ErrorLevel::WARN, msg);
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
     }
 }
 
@@ -66,6 +66,19 @@ namespace NvsStorage
     bool hasKey(const char *key)
     {
         return preferences.isKey(key);
+    }
+    bool removeKey(const char *key)
+    {
+        if(!hasKey(key))
+            return true;
+        bool success = preferences.remove(key);
+        if(!success){
+                    char msg[64] = {};
+        snprintf(msg, sizeof(msg), "nvs remove failed: %s/%s", currentNamespace, key);
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
+        }
+        return success;
+
     }
     bool writeBool(const char *key, const bool value)
     {

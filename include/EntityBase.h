@@ -33,8 +33,8 @@ public:
 
 protected:
     EntityBase(const char *deviceNamespace, uint8_t idx, EntityType type);
-    virtual bool load();
-    virtual bool write(JsonObjectConst data);
+    virtual bool load()=0;
+    virtual bool write(JsonObjectConst data)=0;
     const char *nvsNamespace() const;
     // Builds this entity's prefixed key ("e<idx>_<key>")
     void nvsKey(const char *key, char *buffer, size_t len) const;

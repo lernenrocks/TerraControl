@@ -12,12 +12,20 @@ enum class EntityType : uint8_t
 {
     NONE = 0, /** <@brief empty slot */
 
-    SHELLY_GEN2_RELAY = 1, /** <@brief switch output of a Shelly Gen2 */
-    SHELLY_GEN3_RELAY = 2, /** <@brief switch output of a Shelly Gen3 */
-    SHELLY_GEN3_PLUG_S = 3,/** <@brief switch output of a Shelly Gen3 Plug S */
+    SHELLY_GEN2_RELAY = 1,  /** <@brief switch output of a Shelly Gen2 */
+    SHELLY_GEN3_RELAY = 2,  /** <@brief switch output of a Shelly Gen3 */
+    SHELLY_GEN3_PLUG_S = 3, /** <@brief switch output of a Shelly Gen3 Plug S */
     DHT22_TEMPERATURE = 32, /** <@brief Temperature from DHT22 Sensor */
     DHT22_HUMIDITY = 33,    /** <@brief Humidity from DHT22 Sensor */
     SOIL_MOISTURE = 34,     /** <@brief capacitive Soil Moisture Sensor */
+
+    // measurements of an ApDevice (ApDeviceSensor) - one type per measured quantity,
+    // the type decides the default unit and precision
+    POWER = 40,       /** <@brief active power in W (Shelly switch:N/apower) */
+    ENERGY = 41,      /** <@brief energy counter in Wh (Shelly switch:N/aenergy/total) */
+    TEMPERATURE = 42, /** <@brief temperature in °C (Shelly switch:N/temperature/tC) */
+    UPTIME = 43,      /** <@brief device uptime in s (Shelly sys/uptime) */
+    RSSI = 44,        /** <@brief WiFi signal strength in dBm (Shelly wifi/rssi) */
 
     SYSTEM_TEMPERATURE = 64, /** <@brief temperature of the MainUnit itself */
     SYSTEM_HEAP_FREE = 65,   /** <@brief free heap */
@@ -45,6 +53,16 @@ constexpr const char *entityTypeToString(EntityType type)
         return "DHT22 Humidity";
     case EntityType::SOIL_MOISTURE:
         return "Soil Moisture";
+    case EntityType::POWER:
+        return "Power";
+    case EntityType::ENERGY:
+        return "Energy";
+    case EntityType::TEMPERATURE:
+        return "Temperature";
+    case EntityType::UPTIME:
+        return "Uptime";
+    case EntityType::RSSI:
+        return "RSSI";
     case EntityType::SYSTEM_TEMPERATURE:
         return "System Temperature";
     case EntityType::SYSTEM_HEAP_FREE:
@@ -73,4 +91,65 @@ inline EntityType entityTypeFromString(const char *text)
             return type;
     }
     return EntityType::NONE;
+}
+
+constexpr const char *getDefaultUnit(EntityType type)
+{
+    switch (type)
+    {
+    case EntityType::NONE:
+    case EntityType::SHELLY_GEN2_RELAY:
+    case EntityType::SHELLY_GEN3_RELAY:
+    case EntityType::SHELLY_GEN3_PLUG_S:
+        return "";
+    case EntityType::DHT22_TEMPERATURE:
+    case EntityType::SYSTEM_TEMPERATURE:
+    case EntityType::TEMPERATURE:
+    case EntityType::RTC_TEMPERATURE:
+        return "°C";
+    case EntityType::DHT22_HUMIDITY:
+    case EntityType::SOIL_MOISTURE:
+        return "%";
+    case EntityType::POWER:
+        return "W";
+    case EntityType::ENERGY:
+        return "Wh";
+    case EntityType::UPTIME:
+        return "s";
+    case EntityType::RSSI:
+        return "dBm";
+    case EntityType::SYSTEM_HEAP_FREE:
+        return "B";
+    case EntityType::SYSTEM_NVS_FREE:
+        return "entries";
+    case EntityType::SYSTEM_NOR_FREE:
+        return "B";
+    }
+    return "";
+}
+constexpr int getDefaultPrecision(EntityType type)
+{
+    switch (type)
+    {
+    case EntityType::NONE:
+    case EntityType::SHELLY_GEN2_RELAY:
+    case EntityType::SHELLY_GEN3_RELAY:
+    case EntityType::SHELLY_GEN3_PLUG_S:
+    case EntityType::UPTIME:
+    case EntityType::RSSI:
+    case EntityType::SYSTEM_HEAP_FREE:
+    case EntityType::SYSTEM_NVS_FREE:
+    case EntityType::SYSTEM_NOR_FREE:
+        return 0;
+    case EntityType::DHT22_TEMPERATURE:
+    case EntityType::SYSTEM_TEMPERATURE:
+    case EntityType::TEMPERATURE:
+    case EntityType::RTC_TEMPERATURE:
+    case EntityType::DHT22_HUMIDITY:
+    case EntityType::SOIL_MOISTURE:
+    case EntityType::POWER:
+    case EntityType::ENERGY:
+        return 1;
+    }
+    return 0;
 }
