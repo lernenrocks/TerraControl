@@ -21,6 +21,9 @@ namespace NvsStorage
     bool writeInt(const char *key, const int value);
     bool writeBytes(const char *key, const void *value, size_t len);
 
+    // All read functions change the target only if a value was actually read: a missing key
+    // or a stored value that does not fit returns false and leaves the target untouched.
+    // So a caller can set its default first and read optional values without a hasKey() check.
     bool readBool(const char *key, bool &value);
     bool readLong(const char *key, long &value);
     bool readString(const char *key, char *value, size_t len);

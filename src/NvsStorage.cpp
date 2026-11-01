@@ -145,12 +145,9 @@ namespace NvsStorage
     {
         if (!preferences.isKey(key))
         {
-            if (len > 0) // @note garantes valid empty string in every path
-                value[0] = '\0';
             return false;
         }
-        preferences.getString(key, value, len);
-        return true;
+        return preferences.getString(key, value, len);
     }
     bool readFloat(const char *key, float &value)
     {
