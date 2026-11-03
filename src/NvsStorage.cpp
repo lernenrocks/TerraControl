@@ -28,7 +28,7 @@ namespace
     {
         char msg[64] = {};
         snprintf(msg, sizeof(msg), "nvs write failed: %s/%s", currentNamespace, key);
-        Logger::log(Logger::ErrorLevel::WARN, msg);
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
     }
 }
 
@@ -36,10 +36,7 @@ namespace NvsStorage
 {
     Session::Session(const char *pref_namespace, bool readOnly)
     {
-        if (!begin(pref_namespace, readOnly))
-        {
-            Logger::log(Logger::ErrorLevel::WARN, "could not open nvs!");
-        }
+        begin(pref_namespace, readOnly);
     }
     Session::~Session()
     {
@@ -56,6 +53,32 @@ namespace NvsStorage
     {
         nvs_flash_erase();
         nvs_flash_init();
+    }
+    bool clearNamespace(){
+        bool success = preferences.clear();
+        if(!success){
+        char msg[64] = {};
+        snprintf(msg, sizeof(msg), "could not delete namspace: %s",currentNamespace);
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
+        }
+        return success;
+    }
+    bool hasKey(const char *key)
+    {
+        return preferences.isKey(key);
+    }
+    bool removeKey(const char *key)
+    {
+        if(!hasKey(key))
+            return true;
+        bool success = preferences.remove(key);
+        if(!success){
+                    char msg[64] = {};
+        snprintf(msg, sizeof(msg), "nvs remove failed: %s/%s", currentNamespace, key);
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
+        }
+        return success;
+
     }
     bool writeBool(const char *key, const bool value)
     {
@@ -92,6 +115,13 @@ namespace NvsStorage
             logWriteFailure(key);
         return success;
     }
+    bool writeBytes(const char *key, const void *value, size_t len)
+    {
+        bool success = preferences.putBytes(key, value, len) > 0;
+        if (!success)
+            logWriteFailure(key);
+        return success;
+    }
 
     bool readBool(const char *key, bool &value)
     {
@@ -115,12 +145,9 @@ namespace NvsStorage
     {
         if (!preferences.isKey(key))
         {
-            if (len > 0) // @note garantes valid empty string in every path
-                value[0] = '\0';
             return false;
         }
-        preferences.getString(key, value, len);
-        return true;
+        return preferences.getString(key, value, len);
     }
     bool readFloat(const char *key, float &value)
     {
@@ -139,6 +166,26 @@ namespace NvsStorage
         }
         value = preferences.getInt(key);
         return true;
+    }
+    bool readBytes(const char *key, void *value, size_t len)
+    {
+        if (!preferences.isKey(key))
+        {
+            return false;
+        }
+        if (preferences.getBytesLength(key) > len)
+        {
+            return false; // stored data wouldn't fit - avoid a buffer overrun
+        }
+        preferences.getBytes(key, value, len);
+        return true;
+    }
+    size_t getFreeEntries(){
+        //One page for 126 entries is always kept empty for nvs garbage collection
+        nvs_stats_t stats={};
+        if(nvs_get_stats(nullptr,&stats)!= ESP_OK)
+            return 0;
+        return stats.free_entries > 126 ? stats.free_entries - 126 : 0;
     }
 
 }

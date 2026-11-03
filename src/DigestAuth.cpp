@@ -4,6 +4,7 @@
 
 #include "DigestAuth.h"
 #include "HttpClient.h"
+#include "SecureUtils.h"
 
 // buffer sizes
 #define SHA256_HEX_LEN 64
@@ -149,6 +150,7 @@ namespace DigestAuth
         // ha1:
         snprintf(ha1Input, sizeof(ha1Input), "%s:%s:%s", user, realm, password);
         sha256Hex(ha1Input, ha1, strlen(ha1Input));
+        SecureUtils::ensureZero(ha1Input, sizeof(ha1Input));
         // ha2:
         char ha2Input[HASH_INPUT_MAX];
         char ha2[SHA256_HEX_LEN + 1];
@@ -164,6 +166,7 @@ namespace DigestAuth
         char responseInput[HASH_INPUT_MAX + 1];
         char responseHash[SHA256_HEX_LEN + 1];
         snprintf(responseInput, sizeof(responseInput), "%s:%s:%s:%s:auth:%s", ha1, nonce, nc, cnonce, ha2);
+        SecureUtils::ensureZero(ha1, sizeof(ha1));
         sha256Hex(responseInput, responseHash, strlen(responseInput));
 
         // 4. Response

@@ -6,7 +6,7 @@
 class DHT22Temperature : public SensorBase
 {
 public:
-    DHT22Temperature(DHT *dht, uint8_t id);
+    DHT22Temperature(DHT *dht, uint8_t sensorId);
     ~DHT22Temperature()=default;
     bool getCalibrationJson(char *buffer, size_t len) override;
     bool getCalibrationValuesJson(char *buffer, size_t len) override;
@@ -19,8 +19,8 @@ private:
     DHT *dht;
     unsigned long lastReadTime = 0;
     float lastValue = NAN;
-    const char *defaultUnit = "°C";
-    int defaultPrecision = 1;
-
+    static constexpr const char *defaultUnit = "°C";
+    static constexpr int defaultPrecision = 1;
     bool readRaw(float &buffer) override;
+    bool valid=false;
 };

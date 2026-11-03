@@ -1,15 +1,30 @@
 #include "SoilMoisture.h"
+#include "Logger.h"
 
 namespace
 {
     constexpr const unsigned long MINIMAL_READING_INTERVALL = 500ul;
+    constexpr const long MINIMAL_DIFFERENCE_WET_DRY = 500l;
 }
-SoilMoisture::SoilMoisture(uint8_t pin, uint8_t id) : SensorBase(id, "Soil Moisture"), pin(pin)
+SoilMoisture::SoilMoisture(uint8_t pin, uint8_t sensorId)
+    : SensorBase(sensorId, "Soil Moisture", defaultPrecision, defaultUnit), pin(pin)
 {
-    int dummy;
-    if (!getPrecision(dummy))
+    // load the calibration once - uncalibrated if either value is missing
+    char dryKey[NvsStorage::NVS_KEY_LEN] = {};
+    char wetKey[NvsStorage::NVS_KEY_LEN] = {};
+    nvsKey(CALIBRATE_KEY_DRY, dryKey, sizeof(dryKey));
+    nvsKey(CALIBRATE_KEY_WET, wetKey, sizeof(wetKey));
+    NvsStorage::Session session(SENSOR_NVS_NAMESPACE, true);
+    float calDry = 0.0f, calWet = 0.0f;
+    if (NvsStorage::readFloat(dryKey, calDry) && NvsStorage::readFloat(wetKey, calWet))
     {
-        reset();
+
+        if (fabs(calDry - calWet) >= MINIMAL_DIFFERENCE_WET_DRY)
+        {
+            _calDry = calDry;
+            _calWet = calWet;
+            _calibrated = true;
+        }
     }
 }
 
@@ -30,16 +45,12 @@ bool SoilMoisture::getCalibrationJson(char *buffer, size_t len)
 }
 bool SoilMoisture::getCalibrationValuesJson(char *buffer, size_t len)
 {
-    float calDry = 0.0f, calWet = 0.0f;
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, true);
-    if (!NvsStorage::readFloat(CALIBRATE_KEY_DRY, calDry) || !NvsStorage::readFloat(CALIBRATE_KEY_WET, calWet))
+    if (!_calibrated)
         return false;
 
     StaticJsonDocument<64> doc;
-    doc[CALIBRATE_KEY_DRY] = calDry;
-    doc[CALIBRATE_KEY_WET] = calWet;
+    doc[CALIBRATE_KEY_DRY] = _calDry;
+    doc[CALIBRATE_KEY_WET] = _calWet;
     if (measureJson(doc) >= len)
         return false;
     serializeJson(doc, buffer, len);
@@ -47,17 +58,32 @@ bool SoilMoisture::getCalibrationValuesJson(char *buffer, size_t len)
 }
 bool SoilMoisture::calibrateSensorHardware(JsonObjectConst data)
 {
-    if (data[CALIBRATE_KEY_DRY].isNull() || data[CALIBRATE_KEY_WET].isNull())
+    if (!data[CALIBRATE_KEY_DRY].is<float>() || !data[CALIBRATE_KEY_WET].is<float>())
     {
+        char msg[128] = {};
+        snprintf(msg, sizeof(msg), "Calibration Error Sensor %s", getName());
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
         return false;
     }
     float calDry = data[CALIBRATE_KEY_DRY];
     float calWet = data[CALIBRATE_KEY_WET];
-    char ns[NvsStorage::NVS_KEY_LEN] = {};
-    nvsNamespace(ns, sizeof(ns));
-    NvsStorage::Session session(ns, false);
-    NvsStorage::writeFloat(CALIBRATE_KEY_DRY, calDry);
-    NvsStorage::writeFloat(CALIBRATE_KEY_WET, calWet);
+    if (fabs(calWet - calDry) < MINIMAL_DIFFERENCE_WET_DRY)
+    {
+        char msg[128] = {};
+        snprintf(msg, sizeof(msg), "Sensor %s Difference between calibration values too low", getName());
+        Logger::log(Logger::ErrorLevel::ERROR, msg);
+        return false;
+    }
+    char dryKey[NvsStorage::NVS_KEY_LEN] = {};
+    char wetKey[NvsStorage::NVS_KEY_LEN] = {};
+    nvsKey(CALIBRATE_KEY_DRY, dryKey, sizeof(dryKey));
+    nvsKey(CALIBRATE_KEY_WET, wetKey, sizeof(wetKey));
+    NvsStorage::Session session(SENSOR_NVS_NAMESPACE, false);
+    if (!NvsStorage::writeFloat(dryKey, calDry) || !NvsStorage::writeFloat(wetKey, calWet))
+        return false; // RAM keeps the previous calibration
+    _calDry = calDry; // RAM only after the NVS write succeeded
+    _calWet = calWet;
+    _calibrated = true;
     return true;
 }
 void SoilMoisture::reset()
@@ -65,7 +91,7 @@ void SoilMoisture::reset()
     setScale(DEFAULT_SCALE);
     setOffset(DEFAULT_OFFSET);
     setPrecision(defaultPrecision);
-    setUnit(defaultUnit, strlen(defaultUnit));
+    setUnit(defaultUnit);
 }
 const char *SoilMoisture::getDefaultUnit() const { return defaultUnit; }
 int SoilMoisture::getDefaultPrecision() const { return defaultPrecision; }
@@ -82,19 +108,14 @@ bool SoilMoisture::readRaw(float &buffer)
         } // short circuit or open pin
         else
         {
-            float calDry = 0.0f, calWet = 0.0f;
-            char ns[NvsStorage::NVS_KEY_LEN] = {};
-            nvsNamespace(ns, sizeof(ns));
-            NvsStorage::Session session(ns, true);
-            bool calibrated = NvsStorage::readFloat(CALIBRATE_KEY_DRY, calDry) && NvsStorage::readFloat(CALIBRATE_KEY_WET, calWet);
-            if (!calibrated)
+            if (!_calibrated)
             {
                 lastValue = raw;
                 lastValid = false;
             }
             else
             {
-                lastValue = (raw - calDry) / (calWet - calDry) * 100.0f;
+                lastValue = (raw - _calDry) / (_calWet - _calDry) * 100.0f;
                 lastValid = true;
             }
         }

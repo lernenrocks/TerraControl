@@ -2,24 +2,22 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "NvsStorage.h"
+#include "SensorConfigKeys.h"
+#include <atomic>
 
-constexpr const size_t SENSOR_UNIT_LEN = 16;
-constexpr const size_t SENSOR_NAME_LEN = 32;
-constexpr const float DEFAULT_SCALE = 1.0f;
-constexpr const float DEFAULT_OFFSET = 0.0f;
-constexpr const char CONFIG_KEY_SCALE[] = "scale";
-constexpr const char CONFIG_KEY_OFFSET[] = "offset";
-constexpr const char CONFIG_KEY_UNIT[] = "unit";
-constexpr const char CONFIG_KEY_PRECISION[] = "precision";
-constexpr const char CONFIG_KEY_SENSOR_NAME[] = "name";
+// Specific to SensorBase's own id/type tracking - not shared with RelaySensorBase,
+// which gets its index/type from EntityBase/the owning ApDevice instead.
 constexpr const char CONFIG_KEY_SENSOR_TYPE[] = "type";
 constexpr const char CONFIG_KEY_SENSOR_ID[] = "id";
+// NVS layout: all local sensors share one namespace, every key prefixed with the sensor id
+// ("s<id>_<key>", e.g. "s3_scale") - the number of namespaces does not grow with the sensors.
+constexpr const char SENSOR_NVS_NAMESPACE[] = "sensors";
 
 /** @brief Abstract base class for all sensors */
 class SensorBase
 {
 public:
-    SensorBase(uint8_t id, const char *type);
+    SensorBase(uint8_t sensorId, const char *type, int defaultPrecision, const char *defaultUnit);
     virtual ~SensorBase() = default;
 
     bool read(float &value, bool raw);
@@ -30,27 +28,37 @@ public:
     virtual void reset() = 0;
     virtual const char *getDefaultUnit() const = 0;
     virtual int getDefaultPrecision() const = 0;
-    bool getName(char *buffer, size_t len);
-    bool setName(const char *name, size_t len);
-    bool getScale(float &scale) const;
+    const char *getName() const;
+    bool setName(const char *name);
+    float getScale() const;
     bool setScale(float scale);
-    bool getOffset(float &offset) const;
+    float getOffset() const;
     bool setOffset(float offset);
-    bool getPrecision(int &precision) const;
+    int getPrecision() const;
     bool setPrecision(int precision);
-    bool getUnit(char *buffer, size_t len) const;
-    bool setUnit(const char *unit, size_t len);
+    const char *getUnit() const;
+    bool setUnit(const char *unit);
 
     const char *getType() const;
-    uint8_t getId() const;
+    uint8_t getSensorId() const;
+
+    unsigned long getLastValid() const;
 
 protected:
-    void nvsNamespace(char *buffer, size_t len) const;
-
+    // Builds this sensor's prefixed key ("s<id>_<key>") into a buffer of NvsStorage::NVS_KEY_LEN.
+    // Cannot fail: every key name is checked by a static_assert (SensorConfigKeys.h).
+    void nvsKey(const char *key, char *buffer, size_t len) const;
 
 private:
-    uint8_t _id;
+    uint8_t _sensorId;
     const char *_type;
+    char _name[SENSOR_NAME_LEN] = {};
+    float _scale = DEFAULT_SCALE;
+    float _offset = DEFAULT_OFFSET;
+    int _precision = 0;
+    char _unit[SENSOR_UNIT_LEN] = {};
+    std::atomic<unsigned long> _lastValid=0ul;
     virtual bool readRaw(float &buffer) = 0;
-    void ensureDefaults();
+    void ensureDefaults(int defaultPrecision, const char *defaultUnit);
+
 };

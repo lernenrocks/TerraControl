@@ -1,6 +1,5 @@
 #include "JsonParser.h"
 #include "NetworkUtils.h"
-#include "DataHub.h"
 namespace
 {
     using namespace JsonParser;
@@ -26,8 +25,8 @@ namespace
             Serial.println("Mac nicht im Json enthalten");
             return ParseResult::FIELD_MISSING;
         }
-        char mac[MAC_LEN] = {};
-        strncpy(mac, sys["mac"], MAC_LEN - 1);
+        char mac[MAC_STRING_LEN] = {};
+        strncpy(mac, sys["mac"], MAC_STRING_LEN - 1);
         NetworkUtils::normalizeMac(mac);
         for (int i = 0; i < RELAY_SIZE; i++)
         {
@@ -114,7 +113,7 @@ namespace
 
 namespace JsonParser
 {
-    /** @note Not thread-safe. Call from WiFiWorker task only. */
+    /** @note Not thread-safe. Call from NetworkWorker task only. */
     static StaticJsonDocument<2048> doc;
 
     /**
