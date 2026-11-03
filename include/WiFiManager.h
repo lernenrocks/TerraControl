@@ -6,8 +6,8 @@
 namespace WiFiManager
 {
     /**
-     * @brief Initialisiert WiFi-Verbindung und wifiMutex. Startet mDNS mit dem Gerätenamen aus dem DataHub.
-     * @return true bei erfolgreicher Verbindung und mDNS-Start, false bei Timeout oder mDNS-Fehler.
+     * @brief Startet den Soft-AP mit Gerätename und Passwort aus System, Modus AP+STA.
+     * @return true bei Erfolg, false wenn Gerätename oder Passwort nicht lesbar sind.
      */
     bool initWiFi();
 
@@ -28,14 +28,5 @@ namespace WiFiManager
      * @return true bei Erfolg, false wenn nicht verbunden.
      */
     bool getLocalIp(char *buffer, size_t len);
-
-    /**
-     * @brief Fragt den Shelly-Status unter der angegebenen IP ab und aktualisiert den DataHub.
-     *        Setzt betroffene Entries bei Fehler auf offline.
-     * @param ip IPv4-Adresse des Shelly als null-terminierter String.
-     * @return 200 bei Erfolg, -1 bei TCP-Verbindungsfehler, 0 bei Parse-Fehler, HTTP-Code sonst.
-     */
-    int updateRelayStatus(char *ip);
-
 
 }

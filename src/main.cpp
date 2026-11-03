@@ -9,11 +9,9 @@
 #include <esp_system.h>
 #include "wifi_config.h"
 #include "WiFiManager.h"
-#include "NetworkWorker.h"
 #include "SensorManager.h"
 #include "SoilMoisture.h"
 #include "SensorTypes.h" // @note remove if loading from JSON is implemented
-#include "Controller.h"
 #include "NvsStorage.h"
 
 #define APP_VERSION "0.1"
@@ -38,39 +36,8 @@ void setup()
   Serial.printf("Freier Heap: %u Bytes\n", ESP.getFreeHeap());
   NvsStorage::init();
 
-  // FIXME old:
   Serial.println("\n--- Setup abgeschlossen ---");
   Serial.println("Bereit für WiFiManager Neuaufbau\n");
-  /*
-  DataHub::initDataHub();
-
-  DataHub::WifiRelay relay = {};
-  relay.inUse = true;
-  relay.id = 0;
-  relay.relayMode = RelayTypes::RelayMode::FORCED_OFF;
-  relay.switchDuration = 60000;
-  strncpy(relay.mac, TERRA_CONTOL_000_MAC_STR, sizeof(relay.mac) - 1);
-  DataHub::setWifiRelayEntry(relay, 0);
-  relay = {};
-  relay.inUse = true;
-  relay.id = 0;
-  relay.relayMode = RelayTypes::RelayMode::FORCED_OFF;
-  relay.switchDuration = 60000;
-  strncpy(relay.mac, TERRA_CONTOL_001_MAC_STR, sizeof(relay.mac) - 1);
-  DataHub::setWifiRelayEntry(relay, 1);
-  relay = {};
-  relay.inUse = true;
-  relay.id = 0;
-  relay.relayMode = RelayTypes::RelayMode::FORCED_OFF;
-  relay.switchDuration = 60000;
-  strncpy(relay.mac, TERRA_CONTOL_002_MAC_STR, sizeof(relay.mac) - 1);
-  DataHub::setWifiRelayEntry(relay, 2);
-
-  WiFiManager::initWiFi();
-  WiFiManager::updateWifiStatus();
-  // DataHub::dataHubToSerial();
-  //? Sensoren anmelden und Testen
-*/
   if (!SensorManager::init())
   {
     Serial.println("nicht alle Sensoren initialisiert, Logs prüfen");
@@ -91,7 +58,6 @@ void setup()
   Serial.println("--- Sensor-Konfiguration ---");
   SensorManager::printSensorConfigsToSerial();
 
-  NetworkWorker::start();
   Serial.println("Setup beendet.");
 }
 
