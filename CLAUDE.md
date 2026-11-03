@@ -38,6 +38,11 @@ Kein Merge mit dem Prototyp (`esp32/terrasteuerung`) — Neuentwicklung.
 ### Kein HTTPClient
 - Alle TCP-Kommunikation über `WiFiClient` direkt — Stack-Buffer, kein Heap-Risiko
 
+### Zeit als Parameter (2026-11-03)
+- `millis()` nach Möglichkeit einmal beim Aufrufer holen und als `now` übergeben — Entscheidungen (Fällig-Prüfung, Controller, Frische) bleiben dadurch reine Rechnungen und sind nativ testbar, inkl. `millis()`-Überlauf
+- Selbst holen nur Stellen, die die Zeit zwingend frisch brauchen (z.B. Timeout-Schleifen beim TCP-Lesen)
+- Bestand noch nicht umgestellt: `ApDevice.cpp` (`_lastSeen = millis()`), `SensorBase.cpp` (`_lastValid = millis()`) — mit Schritt 8 (siehe `docs/review-open-items.md`)
+
 ### JSON Parsing
 - Flache JSON-Objekte: eigene `parseJSON()`-Funktion mit `strstr` + `char[]`
 - Komplexes JSON: `StaticJsonDocument` (ArduinoJson) — `DynamicJsonDocument` verboten

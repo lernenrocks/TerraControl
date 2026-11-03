@@ -1,11 +1,18 @@
 # Integration Tests — TerraControl
 
-To be performed manually before every merge to `main`.  
-Test setup: 3 Shelly Gen2/3 devices with hardcoded MACs, ESP32 in local network.
+To be performed manually before every merge to `main`.
+
+> **Prototype results.** The checklist below documents tests run on the
+> prototype (mDNS discovery, `DataHub`, `WiFiWorker`), before the Soft-AP
+> and the Device/Entity redesign. Those modules no longer exist. A checklist
+> for the current architecture follows once the NetworkWorker and Controller
+> are rebuilt.
 
 ---
 
-## Checklist
+## Prototype Checklist
+
+Test setup: 3 Shelly Gen2/3 devices with hardcoded MACs, ESP32 in local network.
 
 ### 1. mDNS Discovery
 

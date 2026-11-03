@@ -30,64 +30,18 @@ a = b; // Werte von b in a kopieren (für POD memberwise)
 - kein Call-by-Value hier, sondern Zuweisung (assignment)!
 - Bools, int etc. werden Feld-für-Feld kopiert
 
-## 3) Getter/Setter mit Lock im DataHub
+## 3) FreeRTOS Lock-Timeout
 
-```cpp
-bool getWiFiStatus(WiFiStatus &out) {
-    if (xSemaphoreTake(dataHubMutex,pdMS_TO_TICKS(100)) != pdTRUE) return false;
-    out = dataHub.wifiStatus;  // Kopie in Referenz-Objekt
-    xSemaphoreGive(dataHubMutex);
-    return true;
-}
-
-bool updateWiFiStatus(const WiFiStatus &in) {
-    if (xSemaphoreTake(dataHubMutex,pdMS_TO_TICKS(100)) != pdTRUE) return false;
-    dataHub.wifiStatus = in;   // deep copy
-    xSemaphoreGive(dataHubMutex);
-    return true;
-}
-```
-
-## 4) DTO / RelayUpdate Pattern (Bulk-Update)
-
-```cpp
-struct RelayUpdate {
-    char mac[MAC_LEN];
-    int id;
-    bool output;
-    bool hasOutput;
-    float temperature;
-    bool hasTemperature;
-    // ...
-};
-
-bool applyRelayUpdate(const RelayUpdate &u) {
-    if (xSemaphoreTake(dataHubMutex,pdMS_TO_TICKS(100)) != pdTRUE) return false;
-    WifiRelay *r = findWifiRelay("mac", u.mac, u.id);
-    if (!r) { xSemaphoreGive(dataHubMutex); return false; }
-    if (u.hasOutput) r->output = u.output;
-    if (u.hasTemperature) r->temperature = u.temperature;
-    xSemaphoreGive(dataHubMutex);
-    return true;
-}
-```
-
-- Vorteil: neue Felder können kontrolliert ergänzt werden
-- Verhindert zudem wilde API-Explosion
-
-## 5) FreeRTOS Lock-Timeout
-
-`xSemaphoreTake(dataHubMutex, pdMS_TO_TICKS(100))`
+`xSemaphoreTake(mutex, pdMS_TO_TICKS(100))`
 - `pdTRUE` = Lock erhalten
 - `pdFALSE` = Timeout (hier 100ms)
 - `portMAX_DELAY` = unbegrenzt warten (nicht für UI empfohlen)
 
-## 6) Pointer vs Referenz Key-Differenzen
+## 4) Pointer vs Referenz Key-Differenzen
 - Referenz: muss gebunden sein, kann nicht null, kein Rebind
 - Pointer: kann null, kann auf anderes Objekt zeigen, pointer arithmetic möglich
 
-## 7) Empfehlung
+## 5) Empfehlung
 - Kapsle Daten in API (`get*/set*` / `apply*`)
-- Vermeide externen direkten `dataHub.wifiRelay[i]`-Zugriff
 - Nutze defaults im Struct (z.B. `Status=UNKNOWN`)
 - C++ ist nicht Java: Verhalten (Kopie vs Ref) muss immer explizit sein
