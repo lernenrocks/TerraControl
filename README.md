@@ -39,18 +39,34 @@ flowchart LR
     subgraph MainUnit["MainUnit (ESP32)"]
         C[Controller<br/>decides]
         W[Network worker<br/>executes]
+        A[API worker<br/>web GUI + REST]
     end
+    subgraph AP["MainUnit's own Wi-Fi access point"]
+        P1[Shelly plug<br/>heating]
+        P2[Shelly plug<br/>lighting]
+        N[ESP32-C3 sensor node<br/>water tank scale, DHT22]
+    end
+    U[Phone / laptop]
+    R[Home router]
     S1 -- wired --> C
     S2 -- wired --> C
     C -- desired state --> W
-    W <-- "own Wi-Fi access point" --> P1[Shelly plug<br/>heating]
-    W <-- "own Wi-Fi access point" --> P2[Shelly plug<br/>lighting]
-    MainUnit -. "optional: home router<br/>(time sync, web GUI)" .- R[Home network]
+    W <--> P1
+    W <--> P2
+    W <-- measurements --> N
+    U -- "via home network" --> R
+    R -- "web GUI" --> A
+    R -- "time sync (NTP)" --> W
+    U -. "without router:<br/>via access point" .-> A
 ```
 
-An ESP32 sits at the heart of the system as the **MainUnit**. It runs its own Wi-Fi access point, and the Shelly smart plugs connect directly to it — not to the home router. All device communication stays local. If the router goes down, the terrarium keeps running.
+*The diagram shows the target architecture — see [Project Status](#project-status) for what runs today.*
 
-Sensors are wired to the MainUnit. The controller compares each measurement against its rule and decides whether a plug should be on or off. The network worker then makes the plugs match that decision.
+An ESP32 sits at the heart of the system as the **MainUnit**. It runs its own Wi-Fi access point, and the Shelly smart plugs and remote sensor nodes connect directly to it — not to the home router. All device communication stays local. If the router goes down, the terrarium keeps running.
+
+Through the home router, the MainUnit gets the current time (NTP), and the web GUI for setting up the control is reachable from the home network. Without a router, the user connects directly to the MainUnit's access point and sets the time by hand.
+
+Sensors are wired to the MainUnit or, for spots further away, to an ESP32-C3 sensor node that reports over the access point. The controller compares each measurement against its rule and decides whether a plug should be on or off. The network worker then makes the plugs match that decision.
 
 **The failsafe:** every "on" command carries a timer. The plug switches itself off when the timer runs out, unless the MainUnit renews the command in time. The MainUnit only renews it while it has a fresh, valid measurement and the controller is still deciding. A crashed controller, a dead sensor or a lost Wi-Fi connection all end the same way: the plug turns off.
 
