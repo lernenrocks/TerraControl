@@ -1,6 +1,25 @@
 #include "ApDeviceRelayBase.h"
 #include "NvsStorage.h"
+#include "Logger.h"
 #include <Arduino.h>
+
+namespace
+{
+    // true only for the modes that may be stored - NOT_IN_LIST and any unknown value are not
+    bool isStorableMode(RelayMode mode)
+    {
+        switch (mode)
+        {
+        case RelayMode::AUTO:
+        case RelayMode::FORCED_ON:
+        case RelayMode::FORCED_OFF:
+            return true;
+        case RelayMode::NOT_IN_LIST:
+            return false;
+        }
+        return false; // a value outside the enum, e.g. cast from a number
+    }
+}
 // public
 ApDeviceRelayBase::ApDeviceRelayBase(const char *nvsNamespace, uint8_t idx, EntityType type) : EntityBase(nvsNamespace, idx, type) {}
 
@@ -46,6 +65,11 @@ void ApDeviceRelayBase::setDesiredOn(bool on) { _desiredOn = on; }
 RelayMode ApDeviceRelayBase::getMode() const { return _mode; }
 bool ApDeviceRelayBase::setMode(RelayMode mode)
 {
+    if (!isStorableMode(mode))
+    {
+        Logger::log(Logger::ErrorLevel::WARN, "relay mode not supported");
+        return false;
+    }
     char key[NvsStorage::NVS_KEY_LEN] = {};
     nvsKey(CONFIG_KEY_RELAY_MODE, key, sizeof(key));
     NvsStorage::Session session(EntityBase::nvsNamespace(), false);
@@ -78,32 +102,32 @@ void ApDeviceRelayBase::loadFailsafe()
     nvsKey(CONFIG_KEY_FAILSAFE_TIMEOUT, key, sizeof(key));
     NvsStorage::Session session(EntityBase::nvsNamespace(), true);
     int seconds = 0;
-    if (NvsStorage::readInt(key, seconds))
+    if (!NvsStorage::readInt(key, seconds))
+        return; // not set by the user: default
+    if (seconds < MIN_FAILSAFE_SEC)
     {
-        _failsafeSeconds = seconds;
+        // the setter never stores such a value - keep the default as a safeguard
+        Logger::log(Logger::ErrorLevel::WARN, "stored failsafe below minimum, default used");
+        return;
     }
+    _failsafeSeconds = seconds;
 }
 void ApDeviceRelayBase::loadMode()
 {
-    int savedMode=0;
-    char key[NvsStorage::NVS_KEY_LEN]={};
-    nvsKey(CONFIG_KEY_RELAY_MODE,key,sizeof(key));
+    char key[NvsStorage::NVS_KEY_LEN] = {};
+    nvsKey(CONFIG_KEY_RELAY_MODE, key, sizeof(key));
+    int savedMode = static_cast<int>(RelayMode::AUTO); // missing key: default AUTO
     {
-    NvsStorage::Session session(EntityBase::nvsNamespace(), true);
-    NvsStorage::readInt(key,savedMode);
+        NvsStorage::Session session(EntityBase::nvsNamespace(), true);
+        NvsStorage::readInt(key, savedMode);
     }
-    RelayMode desiredMode = static_cast<RelayMode>(savedMode);
-    bool found =false;
-    switch (desiredMode)
+    const RelayMode mode = static_cast<RelayMode>(savedMode);
+    if (isStorableMode(mode))
     {
-        case RelayMode::AUTO:
-        case RelayMode::FORCED_OFF:
-        case RelayMode::FORCED_ON:
-        found=true;
-        break;
+        _mode = mode;
+        return;
     }
-    if(found){
-        _mode=desiredMode;
-    }
-
+    // stored by a firmware that knows more modes - never guess, let the user see it
+    _mode = RelayMode::NOT_IN_LIST;
+    Logger::log(Logger::ErrorLevel::WARN, "stored relay mode not supported by this firmware");
 }

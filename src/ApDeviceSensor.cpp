@@ -133,7 +133,7 @@ bool ApDeviceSensor::setPrecision(int precision)
 {
     if (precision < 0)
     {
-        Logger::log(Logger::ErrorLevel::WARN, "unit missing or too long");
+        Logger::log(Logger::ErrorLevel::WARN, "precision must not be negative");
         return false;
     }
     char precisionKey[NvsStorage::NVS_KEY_LEN] = {};

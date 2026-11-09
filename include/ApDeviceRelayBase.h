@@ -21,7 +21,10 @@ enum class RelayMode
 {
     AUTO=0,
     FORCED_ON=1,
-    FORCED_OFF=2
+    FORCED_OFF=2,
+    // RAM-only, never written: the NVS holds a mode this firmware does not know (e.g. after a
+    // firmware rollback). The GUI reports it, setMode() refuses it as a new value.
+    NOT_IN_LIST=255
 };
 
 // Base for every switchable entity (relay output), regardless of manufacturer.

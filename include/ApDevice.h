@@ -39,7 +39,8 @@ public:
     bool getPassword(char *buffer, size_t len) const;
     DeviceType getDeviceType() const;
     const char *getDeviceTypeString() const; // text literal from deviceTypeToString, safe to hold
-    bool getName(char *buffer, size_t len) const;
+    bool getName(char *buffer, size_t len) const;        // stored name, may be ""
+    bool getDefaultName(char *buffer, size_t len) const; // suggestion, never stored by itself
     bool setName(const char *name);
     bool applyResponse(JsonObjectConst data);
     bool isOnline() const;
