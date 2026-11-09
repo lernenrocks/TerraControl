@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../../src/NetworkUtils.cpp"
+#include "NetworkUtils.h" // NetworkUtils.cpp is built from src/ (test_build_src in platformio.ini)
 
 TEST(NormalizeMac, UpperToLower){
     char mac[] = "8CBFEAA03350";

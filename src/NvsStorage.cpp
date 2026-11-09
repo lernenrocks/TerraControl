@@ -97,6 +97,14 @@ namespace NvsStorage
     bool writeString(const char *key, const char *value)
     {
         bool success = preferences.putString(key, value) > 0;
+        // putString() returns the string length: 0 for "" as well as for a failure.
+        // For an empty value read back instead - with room for the terminator only,
+        // getString() returns 1 exactly when "" is stored (an older, longer value does not fit).
+        if (!success && value && value[0] == '\0')
+        {
+            char check[1] = {};
+            success = preferences.getString(key, check, sizeof(check)) == 1;
+        }
         if (!success)
             logWriteFailure(key);
         return success;

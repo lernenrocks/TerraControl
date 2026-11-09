@@ -312,6 +312,8 @@ Sensoren werden in individuellen 3D-gedruckten Gehäusen verbaut, die sich optis
 - **Offset an genau einer Stelle** (2026-10-31): der C3 hat einen eigenen Offset (nötig für den Standalone-Betrieb), die MainUnit ebenfalls (`ApDeviceSensor`, Default 0) — nur einen davon setzen, sonst wirkt er doppelt; GUI soll bei C3-Sensoren darauf hinweisen
 - **Für die C3-Überarbeitung (noch nicht umgesetzt)**:
   - **Typ pro Wert in `/sensors`** (2026-10-24): fängt Umkonfiguration oder Firmware-Update am C3 ab — die MainUnit vergleicht mit dem erwarteten Typ der Entity, Abweichung → Entity ungültig (siehe „Referenz-Stabilität“)
+  - **Skalierung in der Web-GUI nicht setzbar** (2026-11-03): Offset (Correction) lässt sich setzen, Scale nicht — Ursache ungeprüft (fehlende REST-Route, fehlender Aufruf von `setScale()` oder nur die GUI)
+  - **README fürs Repo** (2026-11-03): Zweck, Hardware (HX711 + Wägezelle, DHT22), REST-Endpunkte, Bezug zu TerraControl — das TerraControl-README verlinkt dorthin
 - **Antwortformat** `GET /status`: `{"mac": "AA:BB:CC:DD:EE:FF", "uptime": 3600, "rssi": -65}` — MAC ist persistenter Identifier, zwingend für Onboarding
 - C3 betreibt **Light Sleep** zwischen Abfragen: WiFi-Assoziation bleibt aktiv, eingehende TCP-Verbindung weckt den C3 sofort; spart Strom auch bei kabelgebundener Versorgung
 - C3 sitzt **außerhalb** des Terrariums; Sensorkabel wird durch die Terrariumwand geführt; kabelgebundene Stromversorgung

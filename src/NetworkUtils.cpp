@@ -22,6 +22,17 @@ namespace NetworkUtils
         return true;
     }
     bool macCharToBytes(uint8_t byteMac[6], const char *mac){
+        // Only exactly 12 hex digits are a MAC. Checked before sscanf: "%2hhx" reads *up to*
+        // two digits, stops at the first non-hex character and still counts the byte - so
+        // "8cbfeaa0335g" would pass as ...:05. It also accepts signs and leading spaces.
+        if (!mac || strlen(mac) != MAC_STRING_LEN - 1)
+            return false;
+        for (size_t i = 0; i < MAC_STRING_LEN - 1; i++)
+        {
+            // cast: isxdigit() is undefined for negative char values (e.g. umlauts)
+            if (!isxdigit(static_cast<unsigned char>(mac[i])))
+                return false;
+        }
         return sscanf(mac, "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx",
             &byteMac[0],&byteMac[1],&byteMac[2],&byteMac[3],&byteMac[4],&byteMac[5]) == 6;
     }

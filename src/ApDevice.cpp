@@ -63,18 +63,18 @@ bool ApDevice::load()
             Logger::log(Logger::ErrorLevel::ERROR, msg);
             _deviceType = DeviceType::NONE;
         }
+        // write() never stores a device without entities - a missing or invalid count is an
+        // NVS fault. load() fails, the NVS stays untouched and the slot counts as defective
+        // (hasData() is still true), until the user looks at it.
         int count = 0;
         if (!NvsStorage::readInt(CONFIG_KEY_ENTITY_COUNT, count) || count <= 0 || count > UINT8_MAX)
         {
-            count = 0;
             char msg[64] = {};
             snprintf(msg, sizeof(msg), "WiFi Device %d invalid entity count", _id);
             Logger::log(Logger::ErrorLevel::ERROR, msg);
+            return false;
         }
-        else
-        {
-            entityCount = static_cast<uint8_t>(count);
-        }
+        entityCount = static_cast<uint8_t>(count);
     }
 
     // The device session is closed - each entity reads its prefixed keys from the device
@@ -185,8 +185,7 @@ bool ApDevice::write(JsonObjectConst data)
         NvsStorage::writeInt(CONFIG_KEY_DEVICE_TYPE, static_cast<int>(deviceType));
         NvsStorage::writeInt(CONFIG_KEY_ENTITY_COUNT, static_cast<int>(entityCount));
         // entity types are written by each entity under its own prefixed keys, not here
-        if (strlen(name) > 0)
-            NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name);
+        NvsStorage::writeString(CONFIG_KEY_DEVICE_NAME, name); // "" is a valid name
     }
     // mirror into RAM
     memcpy(_mac, mac, sizeof(_mac));
@@ -276,14 +275,21 @@ const char *ApDevice::getDeviceTypeString() const
     return deviceTypeToString(getDeviceType());
 }
 
+// Exactly the stored name, "" included - no substitute.
 bool ApDevice::getName(char *buffer, size_t len) const
 {
     if (!buffer || len < DEVICE_NAME_LEN)
         return false;
-    if (_name[0] != '\0')
-        strlcpy(buffer, _name, len);
-    else // no name set, the default is not written to the NVS
-        snprintf(buffer, len, "WiFi Device %d", _id);
+    strlcpy(buffer, _name, len);
+    return true;
+}
+
+// A suggestion only (e.g. placeholder in the GUI) - never written to the NVS by itself.
+bool ApDevice::getDefaultName(char *buffer, size_t len) const
+{
+    if (!buffer || len < DEVICE_NAME_LEN)
+        return false;
+    snprintf(buffer, len, "WiFi Device %d", _id);
     return true;
 }
 
